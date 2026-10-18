@@ -366,12 +366,17 @@ export default function Home() {
 
             {/* Permission tier */}
             <Select value={tier} onValueChange={(v) => setTier(v as Tier)}>
-              <SelectTrigger className="w-[110px] h-8 text-[11px] font-medium border-[var(--fw-border)] bg-[var(--fw-surface)] hover:border-[var(--fw-border-strong)] rounded-lg">
-                <div className="flex items-center gap-1.5">
-                  {tier === 'Viewer' && <Shield className="h-3 w-3 text-[var(--fw-text-3)]" />}
-                  {tier === 'Editor' && <ShieldCheck className="h-3 w-3 text-[var(--fw-accent)]" />}
-                  {tier === 'Approver' && <ShieldAlert className="h-3 w-3 text-[var(--fw-warning)]" />}
-                  <SelectValue />
+              <SelectTrigger className="w-[180px] h-8 text-[11px] font-medium border-[var(--fw-border)] bg-[var(--fw-surface)] hover:border-[var(--fw-border-strong)] rounded-lg">
+                <div className="flex items-center gap-1.5 w-full">
+                  {tier === 'Viewer' && <Shield className="h-3.5 w-3.5 text-[var(--fw-text-3)] flex-shrink-0" />}
+                  {tier === 'Editor' && <ShieldCheck className="h-3.5 w-3.5 text-[var(--fw-accent)] flex-shrink-0" />}
+                  {tier === 'Approver' && <ShieldAlert className="h-3.5 w-3.5 text-[var(--fw-warning)] flex-shrink-0" />}
+                  <span className="font-medium">{tier}</span>
+                  <span className="text-[10px] text-[var(--fw-text-3)] truncate">
+                    {tier === 'Viewer' && '· Read-only'}
+                    {tier === 'Editor' && '· Modify budgets'}
+                    {tier === 'Approver' && '· Execute transfers'}
+                  </span>
                 </div>
               </SelectTrigger>
               <SelectContent>

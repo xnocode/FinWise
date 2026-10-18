@@ -255,3 +255,26 @@ Stage Summary:
 - Fixed the chat panel layout so the input field + Send button are always visible.
 - Each column (sidebar / main / chat) now scrolls independently within a viewport-locked layout.
 - Send button is now larger, labeled with "Send" text, and has keyboard shortcut hints below.
+
+---
+Task ID: 8
+Agent: Z.ai (main)
+Task: Fix broken Editor dropdown in header — "Modify budgets" was truncated to "Modify budge".
+
+Work Log:
+- Diagnosed issue: The permission tier SelectTrigger was set to w-[110px], too narrow to fit "Editor" + "Modify budgets" description. The SelectValue component rendered the full content of the selected item (which included both the name and description), causing the text to be clipped at "Modify budge".
+- Fix: Redesigned the SelectTrigger to:
+  - Widen from w-[110px] to w-[180px] to fit the full text
+  - Replace `<SelectValue />` (which renders the entire selected item content) with an explicit custom layout:
+    - Tier icon (Shield/ShieldCheck/ShieldAlert) — flex-shrink-0 so it doesn't get squeezed
+    - Tier name as a bold span ("Editor")
+    - Description as a smaller muted span with truncate ("· Modify budgets")
+  - Added `w-full` to the inner flex container so it fills the trigger width
+  - Used `truncate` on the description so it gracefully handles any overflow
+- Kept the SelectItem dropdown options unchanged — they still show the icon + name + description in two lines for clarity.
+- Verified: dropdown trigger now shows "Editor· Modify budgets" at 180px width with no truncation.
+- Lint passes cleanly. Screenshot: /home/z/my-project/download/finwise-v6-fixed-toolbar.png
+
+Stage Summary:
+- Fixed the truncated "Modify budge" text in the Editor dropdown.
+- Trigger now displays "Editor · Modify budgets" cleanly with proper icon, name, and description layout.
