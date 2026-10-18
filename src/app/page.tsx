@@ -17,7 +17,8 @@ import {
   LayoutDashboard, ListFilter, PiggyBank, Lightbulb, X as XIcon,
   Search, Filter, Play, RefreshCw, Bell, Command, Brain, Gauge,
   LineChart as LineChartIcon, Sparkle, TrendingUp as TrendUp, Calculator,
-  Calendar,
+  Calendar, CalendarClock, CreditCard, Download, AlertCircle, CheckCircle2,
+  Info, Clock, DollarSign, Plus, Rocket,
 } from 'lucide-react'
 import { fmt, fmtMonth } from '@/lib/format'
 import {
@@ -29,7 +30,7 @@ import {
 import { toast } from 'sonner'
 
 type Tier = 'Viewer' | 'Editor' | 'Approver'
-type View = 'overview' | 'transactions' | 'budgets' | 'goals' | 'insights' | 'analytics'
+type View = 'overview' | 'transactions' | 'budgets' | 'goals' | 'insights' | 'analytics' | 'planning'
 
 type ChatMessage = {
   role: 'user' | 'assistant'
@@ -158,6 +159,12 @@ export default function Home() {
   const [analytics, setAnalytics] = useState<any>(null)
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
 
+  // Planning
+  const [debtData, setDebtData] = useState<any>(null)
+  const [billsData, setBillsData] = useState<any>(null)
+  const [smartInsights, setSmartInsights] = useState<any>(null)
+  const [planningLoading, setPlanningLoading] = useState(false)
+
   const loadDashboard = useCallback(async () => {
     const [txRes, budRes, goalRes, recRes, insRes] = await Promise.all([
       fetch('/api/transactions?range=6m'),
@@ -221,8 +228,28 @@ export default function Home() {
     }
   }, [])
 
+  const loadPlanning = useCallback(async () => {
+    setPlanningLoading(true)
+    try {
+      const [debtRes, billsRes, insRes] = await Promise.all([
+        fetch('/api/debt'),
+        fetch('/api/bills'),
+        fetch('/api/smart-insights'),
+      ])
+      const [debt, bills, ins] = await Promise.all([debtRes.json(), billsRes.json(), insRes.json()])
+      if (debt.ok) setDebtData(debt)
+      if (bills.ok) setBillsData(bills)
+      if (ins.ok) setSmartInsights(ins)
+    } catch (err) {
+      console.error('Planning load failed:', err)
+    } finally {
+      setPlanningLoading(false)
+    }
+  }, [])
+
   useEffect(() => { if (seeded) loadDashboard() }, [seeded, loadDashboard])
   useEffect(() => { if (view === 'analytics' && !analytics) loadAnalytics() }, [view, analytics, loadAnalytics])
+  useEffect(() => { if (view === 'planning' && !debtData) loadPlanning() }, [view, debtData, loadPlanning])
 
   const sendChat = async (text?: string) => {
     const msg = (text ?? input).trim()
@@ -321,6 +348,7 @@ export default function Home() {
     { id: 'transactions', label: 'Transactions', icon: ListFilter },
     { id: 'budgets', label: 'Budgets', icon: Wallet, badge: overBudgetCount > 0 ? String(overBudgetCount) : undefined },
     { id: 'goals', label: 'Goals', icon: PiggyBank },
+    { id: 'planning', label: 'Planning', icon: Rocket, badge: 'New' },
     { id: 'insights', label: 'Insights', icon: Lightbulb, badge: anomalies.length > 0 ? String(anomalies.length) : undefined },
     { id: 'analytics', label: 'Analytics', icon: Brain, badge: 'AI' },
   ]
@@ -545,6 +573,16 @@ export default function Home() {
               data={analytics}
               loading={analyticsLoading}
               onRefresh={loadAnalytics}
+            />
+          )}
+          {view === 'planning' && (
+            <PlanningView
+              debtData={debtData}
+              billsData={billsData}
+              smartInsights={smartInsights}
+              loading={planningLoading}
+              onRefresh={loadPlanning}
+              onNavigate={setView}
             />
           )}
         </main>
@@ -2685,6 +2723,462 @@ function AnalyticsView({ data, loading, onRefresh }: {
         </div>
       </Card>
     </div>
+  )
+}
+
+// ═══ View: Planning (Debt Planner + Bills + Smart Insights) ════════════
+function PlanningView({ debtData, billsData, smartInsights, loading, onRefresh, onNavigate }: {
+  debtData: any
+  billsData: any
+  smartInsights: any
+  loading: boolean
+  onRefresh: () => void
+  onNavigate: (view: View) => void
+}) {
+  const [debtStrategy, setDebtStrategy] = useState<'avalanche' | 'snowball'>('avalanche')
+  const [exporting, setExporting] = useState(false)
+
+  const handleExport = async (format: 'csv' | 'summary') => {
+    setExporting(true)
+    try {
+      if (format === 'csv') {
+        // Trigger browser download
+        const a = document.createElement('a')
+        a.href = '/api/export?format=csv&range=12m'
+        a.download = `finwise-export-${new Date().toISOString().split('T')[0]}.csv`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        toast.success('CSV export downloaded')
+      } else {
+        const res = await fetch('/api/export?format=summary&range=12m')
+        const d = await res.json()
+        if (d.ok) {
+          toast.success('Summary report generated', {
+            description: `${d.totals.transactions} transactions · ${fmt(d.totals.incomeCents)} income · ${fmt(d.totals.spendCents)} spend`,
+          })
+        }
+      }
+    } catch (err: any) {
+      toast.error(err.message)
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  if (loading || !debtData || !billsData || !smartInsights) {
+    return (
+      <div className="p-10 flex items-center justify-center h-full">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-[var(--fw-accent)]" />
+          <div className="text-sm text-[var(--fw-text-3)]">Analyzing your financial situation...</div>
+          <div className="text-[11px] text-[var(--fw-text-4)]">Computing debt payoff strategies, bill schedule, and smart insights</div>
+        </div>
+      </div>
+    )
+  }
+
+  const strategy = debtStrategy === 'avalanche' ? debtData.avalanche : debtData.snowball
+  const strategyOrder = debtStrategy === 'avalanche' ? debtData.avalancheOrder : debtData.snowballOrder
+
+  return (
+    <div className="p-6 sm:p-8 lg:p-10 space-y-6 max-w-[1400px]">
+      {/* Header */}
+      <div className="flex items-end justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Rocket className="h-5 w-5 text-[var(--fw-accent)]" />
+            <h1 className="text-[28px] font-semibold tracking-tight">Financial Planning</h1>
+            <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-[var(--fw-accent-soft)] text-[var(--fw-accent)] border border-[var(--fw-accent-border)] uppercase tracking-wider">
+              Problem Solver
+            </span>
+          </div>
+          <p className="text-[13px] text-[var(--fw-text-3)] mt-1">
+            Debt payoff strategies · Bill scheduling · Smart insights · Export tools
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => handleExport('csv')} disabled={exporting} className="h-8 text-xs rounded-lg border-[var(--fw-border)]">
+            <Download className="h-3.5 w-3.5 mr-1.5" /> Export CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => handleExport('summary')} disabled={exporting} className="h-8 text-xs rounded-lg border-[var(--fw-border)]">
+            <FileText className="h-3.5 w-3.5 mr-1.5" /> Summary
+          </Button>
+          <Button variant="outline" size="sm" onClick={onRefresh} className="h-8 text-xs rounded-lg border-[var(--fw-border)]">
+            <RefreshCw className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+
+      {/* ─── Smart Insights Feed ────────────────────────────────────── */}
+      <Card className="p-5 border-[var(--fw-accent-border)] bg-gradient-to-br from-[var(--fw-accent-soft)] via-[var(--fw-surface)] to-[var(--fw-surface)] shadow-[var(--fw-shadow-md)] rounded-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-md bg-gradient-to-br from-[var(--fw-accent)] to-[var(--fw-accent-hover)] flex items-center justify-center shadow-[var(--fw-shadow-glow)]">
+              <Sparkle className="h-4 w-4 text-white" />
+            </div>
+            <div>
+              <h2 className="text-[16px] font-semibold">Smart Insights</h2>
+              <div className="text-[10px] text-[var(--fw-text-3)]">AI-curated daily action items · {smartInsights.summary.total} insights</div>
+            </div>
+          </div>
+          {smartInsights.summary.critical > 0 && (
+            <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-[var(--fw-negative-soft)] text-[var(--fw-negative)] border border-[var(--fw-negative-border)] uppercase tracking-wider">
+              {smartInsights.summary.critical} Critical
+            </span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {smartInsights.insights.map((ins: any, i: number) => (
+            <InsightCard key={ins.id} insight={ins} onNavigate={onNavigate} />
+          ))}
+        </div>
+
+        {smartInsights.summary.potentialImpactCents > 0 && (
+          <div className="mt-4 pt-4 border-t border-[var(--fw-border)] flex items-center justify-between text-[11px]">
+            <span className="text-[var(--fw-text-3)]">Total potential annual impact</span>
+            <span className="font-mono tnum font-semibold text-[var(--fw-positive)]">
+              +{fmt(smartInsights.summary.potentialImpactCents, { compact: true })}
+            </span>
+          </div>
+        )}
+      </Card>
+
+      {/* ─── Debt Payoff Planner ────────────────────────────────────── */}
+      <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <CreditCard className="h-4 w-4 text-[var(--fw-text-2)]" />
+            <h2 className="text-[16px] font-semibold">Debt Payoff Planner</h2>
+            <span className="text-[10px] text-[var(--fw-text-3)] ml-1">
+              {debtData.debts.length} debts · {fmt(debtData.totalDebtCents, { compact: true })} total
+            </span>
+          </div>
+          {/* Strategy toggle */}
+          <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--fw-surface-2)] border border-[var(--fw-border)]">
+            <button
+              onClick={() => setDebtStrategy('avalanche')}
+              className={`px-3 py-1 rounded-md text-[11px] font-medium transition-all ${
+                debtStrategy === 'avalanche'
+                  ? 'bg-[var(--fw-surface)] text-[var(--fw-accent)] shadow-[var(--fw-shadow-xs)]'
+                  : 'text-[var(--fw-text-3)] hover:text-[var(--fw-text-2)]'
+              }`}
+            >
+              Avalanche
+            </button>
+            <button
+              onClick={() => setDebtStrategy('snowball')}
+              className={`px-3 py-1 rounded-md text-[11px] font-medium transition-all ${
+                debtStrategy === 'snowball'
+                  ? 'bg-[var(--fw-surface)] text-[var(--fw-accent)] shadow-[var(--fw-shadow-xs)]'
+                  : 'text-[var(--fw-text-3)] hover:text-[var(--fw-text-2)]'
+              }`}
+            >
+              Snowball
+            </button>
+          </div>
+        </div>
+
+        {/* Strategy explanation */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5">
+          {/* Payoff summary */}
+          <div className="lg:col-span-2 p-4 rounded-xl bg-gradient-to-br from-[var(--fw-surface-2)] to-[var(--fw-surface)] border border-[var(--fw-border)]">
+            <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-2">
+              {debtStrategy === 'avalanche' ? 'Avalanche Strategy' : 'Snowball Strategy'} — Projected Payoff
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] mb-1">Time to payoff</div>
+                <div className="text-[20px] font-semibold tnum text-[var(--fw-accent)]">{strategy.yearsToPayoff} yr</div>
+                <div className="text-[10px] text-[var(--fw-text-3)]">{strategy.monthsToPayoff} months</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] mb-1">Total interest</div>
+                <div className="text-[20px] font-semibold tnum text-[var(--fw-negative)]">{fmt(strategy.totalInterestPaid, { compact: true })}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] mb-1">Total paid</div>
+                <div className="text-[20px] font-semibold tnum">{fmt(strategy.totalPaid, { compact: true })}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] mb-1">Payoff date</div>
+                <div className="text-[14px] font-semibold tnum">{strategy.payoffDate}</div>
+              </div>
+            </div>
+            <div className="mt-3 pt-3 border-t border-[var(--fw-border)] flex items-start gap-2 text-[11px]">
+              <Info className="h-3.5 w-3.5 text-[var(--fw-accent)] flex-shrink-0 mt-0.5" />
+              <span className="text-[var(--fw-text-2)]">{debtData.comparison.reasoning}</span>
+            </div>
+          </div>
+
+          {/* Comparison */}
+          <div className="p-4 rounded-xl bg-[var(--fw-positive-soft)] border border-[var(--fw-positive-border)]">
+            <div className="text-[10px] uppercase tracking-wider text-[var(--fw-positive)] font-semibold mb-2">
+              {debtData.comparison.recommended === debtStrategy ? '✓ Recommended' : 'Alternative strategy'}
+            </div>
+            {debtData.comparison.recommended === debtStrategy ? (
+              <>
+                <div className="text-[20px] font-semibold tnum text-[var(--fw-positive)] mb-1">
+                  Save {fmt(debtData.comparison.interestSavingsCents, { compact: true })}
+                </div>
+                <div className="text-[11px] text-[var(--fw-text-2)]">
+                  vs snowball strategy, plus save {debtData.comparison.timeSavingsMonths} months of payments.
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-[20px] font-semibold tnum mb-1">
+                  {fmt(debtData.comparison.interestSavingsCents, { compact: true })} more
+                </div>
+                <div className="text-[11px] text-[var(--fw-text-2)]">
+                  in interest vs the recommended {debtData.comparison.recommended} strategy.
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Payoff chart */}
+        <div className="h-48 -mx-2 mb-4">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={strategy.monthlyHistory}>
+              <defs>
+                <linearGradient id="debtGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--fw-negative)" stopOpacity={0.25} />
+                  <stop offset="100%" stopColor="var(--fw-negative)" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="interestGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--fw-warning)" stopOpacity={0.2} />
+                  <stop offset="100%" stopColor="var(--fw-warning)" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--fw-border)" strokeOpacity={0.6} vertical={false} />
+              <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'var(--fw-text-3)' }} tickLine={false} axisLine={false} tickFormatter={(v) => `M${v}`} />
+              <YAxis tick={{ fontSize: 10, fill: 'var(--fw-text-3)' }} tickLine={false} axisLine={false} tickFormatter={(v) => fmt(v, { compact: true })} />
+              <Tooltip
+                formatter={(value: any, name: any) => {
+                  if (typeof value !== 'number' || isNaN(value)) return ''
+                  return [fmt(value), name === 'totalBalance' ? 'Remaining balance' : 'Interest paid']
+                }}
+                contentStyle={{ fontSize: '11px', borderRadius: '8px', padding: '8px 12px', border: '1px solid var(--fw-border)', background: 'var(--fw-surface)' }}
+              />
+              <Legend wrapperStyle={{ fontSize: '11px' }} />
+              <Area type="monotone" dataKey="totalBalance" stroke="var(--fw-negative)" strokeWidth={2} fill="url(#debtGrad)" name="totalBalance" />
+              <Area type="monotone" dataKey="totalInterestPaid" stroke="var(--fw-warning)" strokeWidth={1.5} fill="url(#interestGrad)" name="totalInterestPaid" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Debt list with payoff order */}
+        <div className="space-y-2">
+          <div className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-2">
+            Payoff Order ({debtStrategy === 'avalanche' ? 'Highest APR first' : 'Smallest balance first'})
+          </div>
+          {strategyOrder.map((d: any) => (
+            <div key={d.rank} className="flex items-center gap-3 p-3 rounded-lg bg-[var(--fw-surface-2)] border border-[var(--fw-border)]">
+              <div className="h-7 w-7 rounded-md bg-[var(--fw-accent)] text-white flex items-center justify-center text-[12px] font-bold flex-shrink-0">
+                {d.rank}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-medium">{d.name}</div>
+                <div className="text-[10px] text-[var(--fw-text-3)] tnum">
+                  Balance: {fmt(d.balanceCents)} · APR: {(d.apr * 100).toFixed(2)}% · Monthly interest: {fmt(d.monthlyInterestCents)}
+                </div>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <div className="text-[11px] font-semibold tnum">{fmt(d.balanceCents, { compact: true })}</div>
+                <div className="text-[10px] text-[var(--fw-negative)] tnum">{(d.apr * 100).toFixed(1)}% APR</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* ─── Bill Schedule ──────────────────────────────────────────── */}
+      <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <CalendarClock className="h-4 w-4 text-[var(--fw-text-2)]" />
+            <h2 className="text-[16px] font-semibold">Bill Schedule</h2>
+            <span className="text-[10px] text-[var(--fw-text-3)] ml-1">
+              {billsData.summary.total} bills · Next 30 days: {fmt(billsData.summary.next30DaysTotalCents, { compact: true })}
+            </span>
+          </div>
+          <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider ${
+            billsData.summary.status === 'covered' ? 'bg-[var(--fw-positive-soft)] text-[var(--fw-positive)] border border-[var(--fw-positive-border)]' :
+            billsData.summary.status === 'tight' ? 'bg-[var(--fw-warning-soft)] text-[var(--fw-warning)] border border-[var(--fw-warning-border)]' :
+            'bg-[var(--fw-negative-soft)] text-[var(--fw-negative)] border border-[var(--fw-negative-border)]'
+          }`}>
+            {billsData.summary.status === 'covered' ? '✓ Covered' : billsData.summary.status === 'tight' ? '⚠ Tight' : '✗ Shortfall'}
+          </span>
+        </div>
+
+        {/* Coverage bar */}
+        <div className="mb-4 p-3 rounded-lg bg-[var(--fw-surface-2)] border border-[var(--fw-border)]">
+          <div className="flex justify-between text-[11px] mb-2">
+            <span className="text-[var(--fw-text-2)] font-medium">Coverage ratio</span>
+            <span className={`font-mono tnum font-semibold ${
+              billsData.summary.coverageRatio >= 100 ? 'text-[var(--fw-positive)]' :
+              billsData.summary.coverageRatio >= 50 ? 'text-[var(--fw-warning)]' : 'text-[var(--fw-negative)]'
+            }`}>
+              {billsData.summary.coverageRatio}%
+            </span>
+          </div>
+          <div className="h-2 bg-[var(--fw-surface)] rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${
+                billsData.summary.coverageRatio >= 100 ? 'bg-[var(--fw-positive)]' :
+                billsData.summary.coverageRatio >= 50 ? 'bg-[var(--fw-warning)]' : 'bg-[var(--fw-negative)]'
+              }`}
+              style={{ width: `${Math.min(100, billsData.summary.coverageRatio)}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-[10px] text-[var(--fw-text-3)] mt-2 tnum">
+            <span>Available: {fmt(billsData.summary.availableCashCents)}</span>
+            <span>Bills due: {fmt(billsData.summary.next30DaysTotalCents)}</span>
+          </div>
+        </div>
+
+        {/* Bill groups */}
+        <div className="space-y-3">
+          {billsData.summary.overdue > 0 && (
+            <BillGroup title="Overdue" bills={billsData.groups.overdue} variant="negative" />
+          )}
+          <BillGroup title="Due in 7 days" bills={billsData.groups.dueSoon} variant="warning" />
+          <BillGroup title="Due in 30 days" bills={billsData.groups.dueLater} variant="default" />
+          {billsData.groups.farOut.length > 0 && (
+            <BillGroup title="Coming up" bills={billsData.groups.farOut} variant="muted" />
+          )}
+        </div>
+      </Card>
+
+      {/* ─── Quick Actions ──────────────────────────────────────────── */}
+      <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface-2)] shadow-[var(--fw-shadow-sm)] rounded-xl">
+        <div className="flex items-center gap-2 mb-3">
+          <Zap className="h-4 w-4 text-[var(--fw-accent)]" />
+          <h2 className="text-[14px] font-semibold">Quick Actions</h2>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <QuickAction icon={Wallet} label="Adjust budgets" desc="Rebalance envelopes" onClick={() => onNavigate('budgets')} />
+          <QuickAction icon={Target} label="Boost savings" desc="Increase goal contributions" onClick={() => onNavigate('goals')} />
+          <QuickAction icon={Brain} label="View analytics" desc="Deep financial analysis" onClick={() => onNavigate('analytics')} />
+          <QuickAction icon={ListFilter} label="Review transactions" desc="Check recent activity" onClick={() => onNavigate('transactions')} />
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+function InsightCard({ insight, onNavigate }: { insight: any; onNavigate: (v: View) => void }) {
+  const typeConfig = {
+    warning: { icon: AlertCircle, color: 'var(--fw-warning)', bg: 'var(--fw-warning-soft)', border: 'var(--fw-warning-border)' },
+    opportunity: { icon: TrendingUp, color: 'var(--fw-positive)', bg: 'var(--fw-positive-soft)', border: 'var(--fw-positive-border)' },
+    achievement: { icon: CheckCircle2, color: 'var(--fw-positive)', bg: 'var(--fw-positive-soft)', border: 'var(--fw-positive-border)' },
+    tip: { icon: Info, color: 'var(--fw-accent)', bg: 'var(--fw-accent-soft)', border: 'var(--fw-accent-border)' },
+    anomaly: { icon: AlertTriangle, color: 'var(--fw-warning)', bg: 'var(--fw-warning-soft)', border: 'var(--fw-warning-border)' },
+  }
+  const priorityLabel = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' }
+  const config = typeConfig[insight.type as keyof typeof typeConfig] || typeConfig.tip
+  const Icon = config.icon
+
+  return (
+    <div className={`p-3 rounded-lg border bg-[var(--fw-surface)] hover:shadow-[var(--fw-shadow-sm)] transition-shadow`}>
+      <div className="flex items-start gap-2.5">
+        <div className="h-7 w-7 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: config.bg, border: `1px solid ${config.border}` }}>
+          <Icon className="h-3.5 w-3.5" style={{ color: config.color }} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <div className="text-[12px] font-semibold leading-tight">{insight.title}</div>
+            <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0 ${
+              insight.priority === 'critical' ? 'bg-[var(--fw-negative-soft)] text-[var(--fw-negative)] border border-[var(--fw-negative-border)]' :
+              insight.priority === 'high' ? 'bg-[var(--fw-warning-soft)] text-[var(--fw-warning)] border border-[var(--fw-warning-border)]' :
+              'bg-[var(--fw-surface-2)] text-[var(--fw-text-3)] border border-[var(--fw-border)]'
+            }`}>
+              {priorityLabel[insight.priority as keyof typeof priorityLabel]}
+            </span>
+          </div>
+          <div className="text-[11px] text-[var(--fw-text-2)] leading-relaxed mb-2">{insight.detail}</div>
+          <div className="flex items-center justify-between gap-2">
+            {insight.impactCents && insight.impactCents > 0 && (
+              <span className="text-[10px] font-mono tnum font-semibold" style={{ color: config.color }}>
+                {insight.type === 'warning' || insight.type === 'anomaly' ? '' : '+'}{fmt(insight.impactCents, { compact: true })}
+                {insight.type === 'opportunity' || insight.type === 'achievement' ? '/yr' : ''}
+              </span>
+            )}
+            {insight.actionTarget && (
+              <button
+                onClick={() => onNavigate(insight.actionTarget as View)}
+                className="text-[10px] font-medium text-[var(--fw-accent)] hover:underline ml-auto flex items-center gap-0.5"
+              >
+                {insight.action}
+                <ChevronRight className="h-2.5 w-2.5" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function BillGroup({ title, bills, variant }: { title: string; bills: any[]; variant: 'negative' | 'warning' | 'default' | 'muted' }) {
+  if (bills.length === 0) return null
+  const variantConfig = {
+    negative: { dot: 'var(--fw-negative)', label: 'text-[var(--fw-negative)]' },
+    warning: { dot: 'var(--fw-warning)', label: 'text-[var(--fw-warning)]' },
+    default: { dot: 'var(--fw-accent)', label: 'text-[var(--fw-text-2)]' },
+    muted: { dot: 'var(--fw-text-3)', label: 'text-[var(--fw-text-3)]' },
+  }
+  const cfg = variantConfig[variant]
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <div className="h-1.5 w-1.5 rounded-full" style={{ background: cfg.dot }} />
+        <span className={`text-[10px] uppercase tracking-wider font-semibold ${cfg.label}`}>{title}</span>
+        <span className="text-[10px] text-[var(--fw-text-3)]">({bills.length})</span>
+      </div>
+      <div className="space-y-1.5">
+        {bills.map((b: any, i: number) => (
+          <div key={i} className="flex items-center gap-3 p-2 rounded-md bg-[var(--fw-surface-2)] border border-[var(--fw-border)]">
+            <div className="h-7 w-7 rounded-md flex items-center justify-center flex-shrink-0" style={{ backgroundColor: b.color }}>
+              <Receipt className="h-3.5 w-3.5 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[12px] font-medium truncate">{b.merchant}</div>
+              <div className="text-[10px] text-[var(--fw-text-3)]">
+                {b.category} · {b.frequency} · Last paid: {new Date(b.lastPaid).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </div>
+            </div>
+            <div className="text-right flex-shrink-0">
+              <div className="text-[12px] font-semibold tnum">{fmt(b.typicalAmountCents)}</div>
+              <div className={`text-[10px] tnum ${b.daysUntilDue < 0 ? 'text-[var(--fw-negative)]' : b.daysUntilDue <= 7 ? 'text-[var(--fw-warning)]' : 'text-[var(--fw-text-3)]'}`}>
+                {b.daysUntilDue < 0 ? `${Math.abs(b.daysUntilDue)}d overdue` : b.daysUntilDue === 0 ? 'Due today' : `in ${b.daysUntilDue}d`}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function QuickAction({ icon: Icon, label, desc, onClick }: {
+  icon: React.ComponentType<{ className?: string }>
+  label: string
+  desc: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="p-3 rounded-lg bg-[var(--fw-surface)] border border-[var(--fw-border)] hover:border-[var(--fw-accent-border)] hover:bg-[var(--fw-accent-soft)] transition-all text-left fw-focus"
+    >
+      <Icon className="h-4 w-4 text-[var(--fw-accent)] mb-2" />
+      <div className="text-[12px] font-semibold mb-0.5">{label}</div>
+      <div className="text-[10px] text-[var(--fw-text-3)]">{desc}</div>
+    </button>
   )
 }
 

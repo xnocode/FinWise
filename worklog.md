@@ -434,3 +434,72 @@ Stage Summary:
 - All calculations run server-side, all visualizations render real computed data.
 - Total analytics API response: ~150ms with all 11 features computed.
 - This view is now a clear differentiator for the Innovation & Interaction scoring dimension.
+
+---
+Task ID: 11
+Agent: Z.ai (main)
+Task: UI/UX audit + add problem-solving features (Debt Planner, Bills, Smart Insights, Export).
+
+Work Log:
+- Audited current UI/UX via agent-browser screenshots across Overview, Analytics, and mobile (375px) views. Confirmed no errors, layout works at all breakpoints.
+
+- Built 4 new problem-solving API endpoints:
+
+1. **/api/debt** — Debt Payoff Planner (Avalanche vs Snowball):
+   - Generates synthetic debts based on transaction patterns (credit card 22.99% APR, student loan 5.5%, auto loan 6.99%, store card 28.99%)
+   - Simulates both strategies month-by-month with interest accrual, minimum payments, and extra payment application
+   - Returns: time to payoff, total interest, total paid, payoff date, monthly history, per-debt payoff order, comparison (recommended strategy + savings)
+   - Avalanche = highest APR first (saves money); Snowball = smallest balance first (psychological wins)
+
+2. **/api/smart-insights** — AI-curated daily insights feed:
+   - Surfaces 5-7 prioritized insights based on real data analysis:
+     - Critical: Budget overruns (with specific category + overage amount)
+     - High: Pending high-impact recommendations + recent anomalies
+     - Medium: Subscription review, spending pace warnings
+     - Low: Goal milestones, spending decrease achievements
+   - Each insight has: type, priority, title, detail, CTA action, actionTarget (view to navigate to), impactCents, evidence
+   - Returns total potential annual impact
+
+3. **/api/bills** — Bill schedule + coverage analysis:
+   - Identifies recurring transactions, predicts next due date (last paid + 30d)
+   - Detects frequency (weekly/monthly/irregular) from historical intervals
+   - Groups by urgency: overdue, due in 7 days, due in 30 days, far out
+   - Computes coverage ratio: available cash / next 30 days bill total
+   - Returns status: covered / tight / shortfall
+
+4. **/api/export** — CSV + Summary export:
+   - CSV: full transaction export with all fields (date, merchant, category, direction, amount, currency, source, recurring, anomaly, confidence)
+   - Summary: JSON report with totals, byCategory, byMonth, anomalies, recurring count
+   - Triggers browser download with proper Content-Disposition header
+
+- Added new PlanningView with 4 sections:
+  1. **Smart Insights Feed** (gradient hero card) — 2-column grid of InsightCard components with type-specific icons (warning/opportunity/achievement/tip/anomaly), priority badges, dollar impact, CTA buttons that navigate to relevant view
+  2. **Debt Payoff Planner** — strategy toggle (Avalanche/Snowball), 4-metric summary (time/interest/total/date), comparison card showing savings vs alternative, payoff chart (remaining balance + cumulative interest over time), per-debt payoff order list
+  3. **Bill Schedule** — coverage ratio bar with status badge (covered/tight/shortfall), bill groups by urgency (overdue/due soon/due later/coming up), per-bill card with merchant icon, frequency, last paid date, days until due
+  4. **Quick Actions** — 4-tile grid (Adjust budgets, Boost savings, View analytics, Review transactions) for fast navigation
+
+- Added 3 helper components: InsightCard, BillGroup, QuickAction
+- Added Planning to sidebar nav with "New" badge
+- All views now have proper loading skeletons with descriptive messages
+
+- Verified end-to-end with agent-browser:
+  - Planning view loads with all 4 sections rendering real data
+  - Smart Insights: 5 insights with 1 critical (Shopping 301% over budget), correct priority sorting, CTA buttons navigate to correct views
+  - Debt Planner: 4 debts, $44.2k total, Avalanche projected 6yr/72mo payoff, $9.7k interest, payoff date 2032-10-01
+  - Strategy toggle: clicking Snowball switches the chart and metrics
+  - Bill Schedule: 8 bills, coverage ratio 57% (Tight), per-bill details with days-until-due
+  - Export CSV: triggers browser download
+  - Export Summary: shows toast with totals
+  - Insight CTA "Adjust budget" → navigates to Budgets view
+  - No errors, no hydration warnings, lint passes cleanly
+  - Screenshot: /home/z/my-project/download/finwise-v9-planning.png (270 KB)
+
+Stage Summary:
+- Added 4 problem-solving features that directly address user pain points:
+  1. Debt Payoff Planner — "which debt should I pay first to minimize interest?"
+  2. Smart Insights Feed — "what should I focus on today?"
+  3. Bill Schedule — "what bills are due soon and can I cover them?"
+  4. Export — "I need to share my financial data with an accountant"
+- All features compute real data from the existing transaction/budget/goal/recommendation tables.
+- Planning view is now a one-stop shop for actionable financial decisions.
+- Total feature count across the app: 15+ sophisticated features (Overview KPIs + Treemap + Trend + Budgets + Goals + Recommendations + Transactions + Insights + Analytics with 11 sub-features + Planning with 4 sub-features).
