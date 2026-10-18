@@ -79,6 +79,177 @@ function compoundProjection(
   return out
 }
 
+// ─── Seasonal decomposition (additive) ──────────────────────────────────
+function seasonalDecompose(series: number[], period: number = 7) {
+  if (series.length < period * 2) {
+    return { trend: series, seasonal: Array(series.length).fill(0), residual: Array(series.length).fill(0) }
+  }
+  // Trend: centered moving average
+  const trend: number[] = []
+  const half = Math.floor(period / 2)
+  for (let i = 0; i < series.length; i++) {
+    if (i < half || i >= series.length - half) {
+      trend.push(series[i])
+    } else {
+      const window = series.slice(i - half, i + half + 1)
+      trend.push(window.reduce((s, x) => s + x, 0) / window.length)
+    }
+  }
+  // Seasonal: average detrended by phase
+  const detrended = series.map((v, i) => v - trend[i])
+  const seasonalByPhase: number[] = Array(period).fill(0)
+  const counts: number[] = Array(period).fill(0)
+  for (let i = 0; i < series.length; i++) {
+    const phase = i % period
+    seasonalByPhase[phase] += detrended[i]
+    counts[phase]++
+  }
+  for (let p = 0; p < period; p++) seasonalByPhase[p] /= Math.max(1, counts[p])
+  // Normalize seasonal to mean 0
+  const seasonalMean = seasonalByPhase.reduce((s, x) => s + x, 0) / period
+  const seasonalNormalized = seasonalByPhase.map(x => x - seasonalMean)
+  const seasonal = series.map((_, i) => seasonalNormalized[i % period])
+  const residual = series.map((v, i) => v - trend[i] - seasonal[i])
+  return { trend, seasonal, residual }
+}
+
+// ─── Savings Goal Optimizer (greedy LP-like allocation) ─────────────────
+function optimizeGoalAllocation(
+  goals: { id: string; name: string; targetCents: number; savedCents: number; monthlyContributionCents: number }[],
+  totalAvailable: number  // monthly savings pool in cents
+): { id: string; name: string; currentAllocation: number; optimalAllocation: number; monthsToComplete: number; optimalMonthsToComplete: number; improvementDays: number }[] {
+  // Strategy: prioritize by "closest to completion" (highest savedCents/targetCents ratio)
+  // — finishing goals frees up cash for the next one (snowball approach)
+  const sorted = [...goals].sort((a, b) =>
+    (b.savedCents / b.targetCents) - (a.savedCents / a.targetCents)
+  )
+  let remaining = totalAvailable
+  const allocations: Record<string, number> = {}
+  // First pass: give each goal its minimum (current contribution) to maintain momentum
+  for (const g of sorted) {
+    const minAllocation = Math.min(g.monthlyContributionCents, remaining)
+    allocations[g.id] = minAllocation
+    remaining -= minAllocation
+  }
+  // Second pass: pour remaining into the closest-to-completion goal that isn't done
+  for (const g of sorted) {
+    if (remaining <= 0) break
+    const remaining_to_target = g.targetCents - g.savedCents
+    if (remaining_to_target <= 0) continue
+    const boost = Math.min(remaining, remaining_to_target / 3)  // cap to 1/3 of remaining gap
+    allocations[g.id] += boost
+    remaining -= boost
+  }
+  // Final pass: distribute any leftover equally among incomplete goals
+  const incomplete = sorted.filter(g => g.savedCents < g.targetCents)
+  if (incomplete.length > 0 && remaining > 0) {
+    const share = remaining / incomplete.length
+    for (const g of incomplete) allocations[g.id] += share
+  }
+
+  return sorted.map(g => {
+    const optimalAllocation = Math.round(allocations[g.id] || 0)
+    const monthsToComplete = g.monthlyContributionCents > 0
+      ? Math.ceil((g.targetCents - g.savedCents) / g.monthlyContributionCents)
+      : 999
+    const optimalMonthsToComplete = optimalAllocation > 0
+      ? Math.ceil((g.targetCents - g.savedCents) / optimalAllocation)
+      : 999
+    return {
+      id: g.id,
+      name: g.name,
+      currentAllocation: g.monthlyContributionCents,
+      optimalAllocation,
+      monthsToComplete,
+      optimalMonthsToComplete,
+      improvementDays: Math.max(0, (monthsToComplete - optimalMonthsToComplete) * 30),
+    }
+  })
+}
+
+// ─── 5-Year Monte Carlo simulation ──────────────────────────────────────
+function monteCarlo5Year(
+  startingBalance: number,
+  monthlyContribution: number,
+  annualReturn: number,
+  annualVolatility: number,  // std dev of returns
+  months: number = 60,
+  trials: number = 500
+): { finalBalances: number[]; percentiles: { p5: number; p25: number; p50: number; p75: number; p95: number }; successProbability: number; histogram: { bucket: string; count: number; lower: number; upper: number }[] } {
+  const monthlyReturn = annualReturn / 12
+  const monthlyVol = annualVolatility / Math.sqrt(12)
+  const finalBalances: number[] = []
+
+  for (let t = 0; t < trials; t++) {
+    let balance = startingBalance
+    for (let m = 0; m < months; m++) {
+      // Box-Muller transform for normal distribution
+      const u1 = Math.random()
+      const u2 = Math.random()
+      const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
+      const shock = monthlyReturn + z * monthlyVol
+      balance = Math.max(0, balance * (1 + shock) + monthlyContribution)
+    }
+    finalBalances.push(Math.round(balance))
+  }
+
+  finalBalances.sort((a, b) => a - b)
+  const pct = (p: number) => finalBalances[Math.floor(trials * p)]
+  const percentiles = {
+    p5: pct(0.05),
+    p25: pct(0.25),
+    p50: pct(0.5),
+    p75: pct(0.75),
+    p95: pct(0.95),
+  }
+  // Success = exceeds starting + total contributions
+  const target = startingBalance + monthlyContribution * months
+  const successProbability = Math.round(finalBalances.filter(b => b >= target).length / trials * 100)
+
+  // Histogram (10 buckets)
+  const min = finalBalances[0]
+  const max = finalBalances[trials - 1]
+  const range = max - min || 1
+  const bucketSize = range / 10
+  const histogram = Array.from({ length: 10 }, (_, i) => {
+    const lower = Math.round(min + i * bucketSize)
+    const upper = Math.round(min + (i + 1) * bucketSize)
+    const count = finalBalances.filter(b => b >= lower && b < upper).length
+    return {
+      bucket: fmt_bucket(lower / 100),
+      count,
+      lower: lower / 100,
+      upper: upper / 100,
+    }
+  })
+  return { finalBalances, percentiles, successProbability, histogram }
+}
+
+function fmt_bucket(cents: number): string {
+  if (cents >= 1000000) return `$${(cents / 1000000).toFixed(1)}M`
+  if (cents >= 1000) return `$${(cents / 1000).toFixed(0)}k`
+  return `$${cents.toFixed(0)}`
+}
+
+// ─── Herfindahl-Hirschman Index (merchant concentration) ────────────────
+function calcHHI(merchants: { cents: number }[]): { hhi: number; topShare: number; top3Share: number; interpretation: string } {
+  const total = merchants.reduce((s, m) => s + m.cents, 0)
+  if (total === 0 || merchants.length === 0) {
+    return { hhi: 0, topShare: 0, top3Share: 0, interpretation: 'No data' }
+  }
+  const shares = merchants.map(m => (m.cents / total) * 100)
+  const hhi = shares.reduce((s, sh) => s + sh * sh, 0)
+  const sortedShares = [...shares].sort((a, b) => b - a)
+  const topShare = sortedShares[0] || 0
+  const top3Share = sortedShares.slice(0, 3).reduce((s, x) => s + x, 0)
+  const interpretation = hhi < 1500
+    ? 'Diversified spending — low merchant concentration risk'
+    : hhi < 2500
+    ? 'Moderate concentration — top merchants have meaningful share'
+    : 'High concentration — spending heavily concentrated in few merchants'
+  return { hhi: Math.round(hhi), topShare: Math.round(topShare), top3Share: Math.round(top3Share), interpretation }
+}
+
 // ─── Financial Health Score calculation ─────────────────────────────────
 function calcHealthScore(input: {
   savingsRate: number            // 0-1 (net savings / income)
@@ -273,6 +444,91 @@ export async function GET() {
     }
   })
 
+  // ─── Spending heatmap (last 365 days, GitHub-style) ──────────────
+  const heatmapData: { date: string; day: string; spend: number; level: 0 | 1 | 2 | 3 | 4 }[] = []
+  for (let d = 364; d >= 0; d--) {
+    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - d, 0, 0, 0)
+    const dayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() - d, 23, 59, 59)
+    const spend = allTx
+      .filter(t => t.date >= dayStart && t.date <= dayEnd && t.direction === 'debit')
+      .reduce((s, t) => s + t.amountCents, 0)
+    // Logarithmic level mapping for better visualization
+    let level: 0 | 1 | 2 | 3 | 4 = 0
+    if (spend > 0) level = 1
+    if (spend > 2000) level = 2     // $20+
+    if (spend > 5000) level = 3     // $50+
+    if (spend > 15000) level = 4    // $150+
+    heatmapData.push({
+      date: dayStart.toISOString().split('T')[0],
+      day: dayStart.toLocaleDateString('en-US', { weekday: 'short' }),
+      spend,
+      level,
+    })
+  }
+
+  // ─── Seasonal decomposition (last 30 days, weekly seasonality) ────
+  const seasonal = seasonalDecompose(dailySpend, 7)
+  const seasonalData = dailySpend.map((v, i) => ({
+    day: i,
+    label: `D${i + 1}`,
+    observed: v,
+    trend: Math.round(seasonal.trend[i]),
+    seasonal: Math.round(seasonal.seasonal[i]),
+    residual: Math.round(seasonal.residual[i]),
+  }))
+
+  // ─── 5-Year Monte Carlo simulation ────────────────────────────────
+  const totalSavingsNow = goals.reduce((s, g) => s + g.savedCents, 0)
+  const monthlySavingsPool = goals.reduce((s, g) => s + g.monthlyContributionCents, 0)
+  const monteCarlo = monteCarlo5Year(
+    totalSavingsNow,
+    monthlySavingsPool,
+    0.07,    // 7% expected annual return
+    0.15,    // 15% volatility (typical equity index)
+    60,      // 5 years
+    500      // 500 trials
+  )
+
+  // ─── Savings Goal Optimizer ───────────────────────────────────────
+  const goalOptimizer = optimizeGoalAllocation(
+    goals.map(g => ({
+      id: g.id, name: g.name, targetCents: g.targetCents,
+      savedCents: g.savedCents, monthlyContributionCents: g.monthlyContributionCents,
+    })),
+    monthlySavingsPool
+  )
+
+  // ─── Merchant Concentration (HHI) ─────────────────────────────────
+  const merchantSpend: Record<string, number> = {}
+  for (const t of allTx) {
+    if (t.direction !== 'debit') continue
+    merchantSpend[t.merchantNorm] = (merchantSpend[t.merchantNorm] || 0) + t.amountCents
+  }
+  const merchantList = Object.entries(merchantSpend)
+    .map(([merchant, cents]) => ({ merchant, cents }))
+    .sort((a, b) => b.cents - a.cents)
+  const hhi = calcHHI(merchantList)
+
+  // ─── Financial Stress Index (multi-factor risk) ───────────────────
+  // Combines: budget overruns, anomaly rate, savings rate volatility, low emergency fund
+  const budgetOverrunRate = budgets.length > 0
+    ? budgets.filter(b => b.percentUsed > 100).length / budgets.length
+    : 0
+  const savingsVolatility = (() => {
+    const nets = savingsTrajectory.map(s => s.net)
+    if (nets.length < 2) return 0
+    const mean = nets.reduce((s, x) => s + x, 0) / nets.length
+    const variance = nets.reduce((s, x) => s + Math.pow(x - mean, 2), 0) / nets.length
+    return mean !== 0 ? Math.sqrt(variance) / Math.abs(mean) : 0
+  })()
+  const stressScore = Math.round(
+    (budgetOverrunRate * 30) +
+    (anomalyRate * 200) +           // scaled since usually <0.1
+    (savingsVolatility * 25) +
+    (Math.max(0, 1 - emergencyFundMonths / 6) * 20)
+  )
+  const stressLevel = stressScore < 25 ? 'Low' : stressScore < 50 ? 'Moderate' : stressScore < 75 ? 'Elevated' : 'High'
+
   return NextResponse.json({
     ok: true,
     healthScore,
@@ -300,10 +556,50 @@ export async function GET() {
     goalsProjection,
     savingsTrajectory,
     monthlySpend,
+    // ─── New advanced analytics ─────────────────────────────────────
+    heatmap: heatmapData,
+    seasonalDecomposition: seasonalData,
+    monteCarlo: {
+      ...monteCarlo,
+      trials: 500,
+      horizon: '5 years',
+      startingBalance: totalSavingsNow,
+      monthlyContribution: monthlySavingsPool,
+      annualReturn: 0.07,
+      annualVolatility: 0.15,
+    },
+    goalOptimizer: {
+      totalAvailableCents: monthlySavingsPool,
+      allocations: goalOptimizer,
+      strategy: 'Snowball — prioritize goals closest to completion',
+    },
+    merchantConcentration: {
+      ...hhi,
+      topMerchants: merchantList.slice(0, 5).map((m, i) => ({
+        rank: i + 1,
+        merchant: m.merchant,
+        cents: m.cents,
+        share: Math.round((m.cents / merchantList.reduce((s, x) => s + x.cents, 0)) * 100),
+      })),
+      totalMerchants: merchantList.length,
+    },
+    financialStress: {
+      score: Math.min(100, stressScore),
+      level: stressLevel,
+      factors: [
+        { label: 'Budget Overruns', value: Math.round(budgetOverrunRate * 100), contribution: Math.round(budgetOverrunRate * 30) },
+        { label: 'Anomaly Rate', value: Math.round(anomalyRate * 1000) / 10, contribution: Math.round(anomalyRate * 200) },
+        { label: 'Savings Volatility', value: Math.round(savingsVolatility * 100), contribution: Math.round(savingsVolatility * 25) },
+        { label: 'Emergency Fund Gap', value: Math.round(Math.max(0, 1 - emergencyFundMonths / 6) * 100), contribution: Math.round(Math.max(0, 1 - emergencyFundMonths / 6) * 20) },
+      ],
+    },
     assumptions: {
       investmentReturnRate: ASSUMED_RETURN,
       forecastHorizon: 14,
       forecastModel: 'Holt-Winters (level=0.4, trend=0.2, seasonal=0.15, period=7d)',
+      monteCarloTrials: 500,
+      monteCarloVolatility: 0.15,
+      seasonalPeriod: 7,
     },
   })
 }

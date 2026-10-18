@@ -355,3 +355,82 @@ Stage Summary:
 - What-If updates are real-time (client-side recompute on slider change).
 - Analytics API: 200 in 25ms — fast enough for production use.
 - This view directly addresses the Innovation & Interaction scoring dimension (30% of competition score).
+
+---
+Task ID: 10
+Agent: Z.ai (main)
+Task: Make the Analytics view even more advanced — added 5 new sophisticated features.
+
+Work Log:
+- Extended /api/analytics endpoint with 5 new advanced calculations:
+
+1. **Spending Heatmap (365 days, GitHub-style)**:
+   - Daily spend for last 365 days
+   - 5-level intensity scale (0=none, 1=$0-20, 2=$20-50, 3=$50-150, 4=$150+)
+   - Returns active days, high-spend days, avg per active day
+
+2. **5-Year Monte Carlo Simulation**:
+   - 500 trials, 60 months, 7% annual return, 15% volatility (typical equity index)
+   - Box-Muller transform for normal distribution random shocks
+   - Returns final balance distribution + percentiles (P5, P25, P50, P75, P95)
+   - Success probability = % of trials exceeding baseline (starting + total contributions)
+   - Histogram with 10 buckets
+
+3. **Seasonal Decomposition (additive model)**:
+   - Centered moving average for trend extraction (7-day period)
+   - Detrended phase averaging for seasonal component
+   - Normalized to mean 0
+   - Residual = observed - trend - seasonal
+   - Renders all 4 components (observed, trend, seasonal, residual)
+
+4. **Savings Goal Optimizer (LP-style greedy allocation)**:
+   - Strategy: Snowball — prioritize goals closest to completion (highest savedCents/targetCents ratio)
+   - 3-pass allocation: minimums → boost closest-to-completion → distribute remaining equally
+   - Returns current vs optimal allocation, months to complete, improvement in days
+
+5. **Merchant Concentration Index (HHI)**:
+   - Herfindahl-Hirschman Index: sum of squared market shares × 100
+   - <1500 = Diversified, 1500-2500 = Moderate, >2500 = High concentration
+   - Returns top 5 merchants with share %, top share, top 3 share, interpretation
+
+6. **Financial Stress Index (multi-factor risk)**:
+   - Composite score 0-100 combining:
+     - Budget overruns (30% weight)
+     - Anomaly rate × 200 (anomalies per transaction)
+     - Savings volatility (coefficient of variation, 25% weight)
+     - Emergency fund gap (20% weight)
+   - Returns score, level (Low/Moderate/Elevated/High), factor breakdown with contributions
+
+- Added 4 new visualization sections to AnalyticsView:
+  1. **Spending Heatmap Calendar** — 365-cell grid with color intensity (GitHub-style), legend, hover tooltips with date+amount, summary stats (active days, high-spend days, avg per active day)
+  2. **5-Year Monte Carlo** — gradient card with histogram bar chart, 5-percentile grid (P5 red, P25, P50 median accent, P75, P95 green), success probability badge
+  3. **Financial Stress Index** — radial gauge with color-coded score, level badge, insight text, 4-factor breakdown with contribution bars
+  4. **3-column row with Goal Optimizer + Seasonal Decomposition + Merchant Concentration**:
+     - Goal Optimizer: per-goal cards showing current vs optimal allocation, months to complete, days saved
+     - Seasonal Decomposition: 4-line chart (observed/trend/seasonal/residual)
+     - Merchant Concentration: HHI score with color-coded interpretation, concentration bar with thresholds, top 5 merchants list with share %
+
+- Updated Model Assumptions footer to show all model params: investment return, 14-day Holt-Winters forecast, 5-yr Monte Carlo trials + volatility, seasonal period.
+
+- Verified end-to-end with agent-browser:
+  - All new sections render correctly
+  - Heatmap: 121 active days, 39 high-spend days, $211.82 avg per active day
+  - Monte Carlo: 80% success probability, percentiles $26.8k → ~$68k range
+  - Financial Stress: 36 (Moderate), top contributors: Savings Volatility (+15), Emergency Fund Gap (+18)
+  - HHI: 2000 (Moderate concentration), top merchant: property-management-co (43%)
+  - Goal Optimizer: per-goal cards with current vs optimal allocation
+  - Seasonal Decomp: 4-line chart rendering
+  - No errors, no hydration warnings, lint passes cleanly.
+  - Screenshot: /home/z/my-project/download/finwise-v8-advanced.png (239 KB)
+
+Stage Summary:
+- Added 5 sophisticated analytics features that go well beyond standard finance apps:
+  1. 365-day spending heatmap (GitHub-style)
+  2. 5-Year Monte Carlo with histogram + percentiles
+  3. Seasonal Decomposition (additive model: trend + seasonal + residual)
+  4. Savings Goal Optimizer (LP-style greedy allocation)
+  5. Merchant Concentration Index (HHI)
+  6. Financial Stress Index (multi-factor composite risk score)
+- All calculations run server-side, all visualizations render real computed data.
+- Total analytics API response: ~150ms with all 11 features computed.
+- This view is now a clear differentiator for the Innovation & Interaction scoring dimension.

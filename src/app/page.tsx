@@ -17,6 +17,7 @@ import {
   LayoutDashboard, ListFilter, PiggyBank, Lightbulb, X as XIcon,
   Search, Filter, Play, RefreshCw, Bell, Command, Brain, Gauge,
   LineChart as LineChartIcon, Sparkle, TrendingUp as TrendUp, Calculator,
+  Calendar,
 } from 'lucide-react'
 import { fmt, fmtMonth } from '@/lib/format'
 import {
@@ -2351,6 +2352,313 @@ function AnalyticsView({ data, loading, onRefresh }: {
         </div>
       </Card>
 
+      {/* ─── Row 6: Spending Heatmap (365 days, GitHub-style) ──────── */}
+      <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-[var(--fw-text-2)]" />
+            <h2 className="text-[14px] font-semibold">Spending Heatmap</h2>
+            <span className="text-[10px] text-[var(--fw-text-3)] ml-1">Last 365 days</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-[10px] text-[var(--fw-text-3)]">
+            <span>Less</span>
+            <div className="h-3 w-3 rounded-[3px] bg-[var(--fw-surface-2)]" />
+            <div className="h-3 w-3 rounded-[3px] bg-[var(--fw-accent)]" style={{ opacity: 0.3 }} />
+            <div className="h-3 w-3 rounded-[3px] bg-[var(--fw-accent)]" style={{ opacity: 0.55 }} />
+            <div className="h-3 w-3 rounded-[3px] bg-[var(--fw-accent)]" style={{ opacity: 0.8 }} />
+            <div className="h-3 w-3 rounded-[3px] bg-[var(--fw-accent)]" />
+            <span>More</span>
+          </div>
+        </div>
+        <div className="overflow-x-auto fw-scroll pb-2">
+          <div className="inline-grid grid-flow-col grid-rows-7 gap-[3px] min-w-[800px]">
+            {data.heatmap.map((day: any, i: number) => {
+              const opacity = day.level === 0 ? 0 : 0.25 + day.level * 0.2
+              return (
+                <div
+                  key={i}
+                  className="h-3 w-3 rounded-[3px] hover:ring-2 hover:ring-[var(--fw-accent)] hover:ring-offset-1 transition-all cursor-pointer"
+                  style={{
+                    backgroundColor: day.level === 0 ? 'var(--fw-surface-2)' : 'var(--fw-accent)',
+                    opacity: day.level === 0 ? 1 : opacity,
+                  }}
+                  title={`${day.date}: ${fmt(day.spend)}`}
+                />
+              )
+            })}
+          </div>
+        </div>
+        <div className="mt-3 pt-3 border-t border-[var(--fw-border)] grid grid-cols-3 gap-3 text-[11px]">
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-0.5">Active days</div>
+            <div className="font-mono tnum font-semibold">{data.heatmap.filter((d: any) => d.level > 0).length}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-0.5">High-spend days</div>
+            <div className="font-mono tnum font-semibold text-[var(--fw-negative)]">{data.heatmap.filter((d: any) => d.level === 4).length}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-0.5">Avg per active day</div>
+            <div className="font-mono tnum font-semibold">
+              {fmt(data.heatmap.filter((d: any) => d.level > 0).reduce((s: number, d: any) => s + d.spend, 0) / Math.max(1, data.heatmap.filter((d: any) => d.level > 0).length))}
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* ─── Row 7: 5-Year Monte Carlo + Financial Stress ──────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Monte Carlo */}
+        <Card className="p-5 border-[var(--fw-accent-border)] bg-gradient-to-br from-[var(--fw-surface)] to-[var(--fw-accent-soft)] shadow-[var(--fw-shadow-md)] rounded-xl">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="h-7 w-7 rounded-md bg-gradient-to-br from-[var(--fw-accent)] to-[var(--fw-accent-hover)] flex items-center justify-center">
+                <Sparkle className="h-4 w-4 text-white" />
+              </div>
+              <div>
+                <h2 className="text-[14px] font-semibold">5-Year Monte Carlo</h2>
+                <div className="text-[10px] text-[var(--fw-text-3)]">500 trials · 7% return · 15% volatility</div>
+              </div>
+            </div>
+            <span className="text-[10px] font-semibold px-2 py-1 rounded-md bg-[var(--fw-positive-soft)] text-[var(--fw-positive)] border border-[var(--fw-positive-border)]">
+              {data.monteCarlo.successProbability}% success
+            </span>
+          </div>
+
+          {/* Histogram */}
+          <div className="h-40 -mx-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data.monteCarlo.histogram}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--fw-border)" strokeOpacity={0.4} vertical={false} />
+                <XAxis dataKey="bucket" tick={{ fontSize: 9, fill: 'var(--fw-text-3)' }} tickLine={false} axisLine={false} />
+                <YAxis tick={{ fontSize: 9, fill: 'var(--fw-text-3)' }} tickLine={false} axisLine={false} />
+                <Tooltip
+                  formatter={(value: any, name: any) => [value, name === 'count' ? 'Trials' : name]}
+                  contentStyle={{ fontSize: '10px', borderRadius: '6px', padding: '4px 8px', border: '1px solid var(--fw-border)', background: 'var(--fw-surface)' }}
+                />
+                <Bar dataKey="count" fill="var(--fw-accent)" radius={[3, 3, 0, 0]} name="count" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Percentile grid */}
+          <div className="grid grid-cols-5 gap-2 mt-4 pt-4 border-t border-[var(--fw-border)]">
+            <div className="text-center">
+              <div className="text-[9px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-0.5">P5</div>
+              <div className="text-[12px] font-semibold tnum text-[var(--fw-negative)]">{fmt(data.monteCarlo.percentiles.p5, { compact: true })}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-[9px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-0.5">P25</div>
+              <div className="text-[12px] font-semibold tnum">{fmt(data.monteCarlo.percentiles.p25, { compact: true })}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-[9px] uppercase tracking-wider text-[var(--fw-accent)] font-semibold mb-0.5">Median</div>
+              <div className="text-[13px] font-bold tnum text-[var(--fw-accent)]">{fmt(data.monteCarlo.percentiles.p50, { compact: true })}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-[9px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-0.5">P75</div>
+              <div className="text-[12px] font-semibold tnum">{fmt(data.monteCarlo.percentiles.p75, { compact: true })}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-[9px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-0.5">P95</div>
+              <div className="text-[12px] font-semibold tnum text-[var(--fw-positive)]">{fmt(data.monteCarlo.percentiles.p95, { compact: true })}</div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Financial Stress Index */}
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className={`h-4 w-4 ${
+                data.financialStress.level === 'Low' ? 'text-[var(--fw-positive)]' :
+                data.financialStress.level === 'Moderate' ? 'text-[var(--fw-warning)]' :
+                'text-[var(--fw-negative)]'
+              }`} />
+              <h2 className="text-[14px] font-semibold">Financial Stress Index</h2>
+            </div>
+            <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider ${
+              data.financialStress.level === 'Low' ? 'bg-[var(--fw-positive-soft)] text-[var(--fw-positive)] border border-[var(--fw-positive-border)]' :
+              data.financialStress.level === 'Moderate' ? 'bg-[var(--fw-warning-soft)] text-[var(--fw-warning)] border border-[var(--fw-warning-border)]' :
+              'bg-[var(--fw-negative-soft)] text-[var(--fw-negative)] border border-[var(--fw-negative-border)]'
+            }`}>
+              {data.financialStress.level}
+            </span>
+          </div>
+
+          {/* Score gauge */}
+          <div className="flex items-center gap-4 mb-4">
+            <div className="relative h-20 w-20 flex-shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadialBarChart
+                  innerRadius="70%" outerRadius="100%"
+                  data={[{
+                    value: data.financialStress.score,
+                    fill: data.financialStress.level === 'Low' ? 'var(--fw-positive)' : data.financialStress.level === 'Moderate' ? 'var(--fw-warning)' : 'var(--fw-negative)'
+                  }]}
+                  startAngle={90} endAngle={90 - (data.financialStress.score / 100) * 360}
+                >
+                  <RadialBar background={{ fill: 'var(--fw-surface-2)' }} dataKey="value" cornerRadius={10} />
+                </RadialBarChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex items-center justify-center text-[18px] font-bold tnum">
+                {data.financialStress.score}
+              </div>
+            </div>
+            <div className="flex-1">
+              <div className="text-[11px] text-[var(--fw-text-2)] leading-relaxed">
+                {data.financialStress.level === 'Low'
+                  ? 'Your financial situation is stable with minimal risk factors. Continue your current savings discipline.'
+                  : data.financialStress.level === 'Moderate'
+                  ? 'Some risk factors present. Review the contributing factors below to identify areas to address.'
+                  : data.financialStress.level === 'Elevated'
+                  ? 'Multiple stress factors detected. Focus on the highest-contributing factors to reduce risk.'
+                  : 'Critical stress level — immediate action recommended on the top contributing factors.'}
+              </div>
+            </div>
+          </div>
+
+          {/* Factor breakdown */}
+          <div className="space-y-2">
+            {data.financialStress.factors.map((f: any, i: number) => (
+              <div key={i} className="flex items-center gap-2">
+                <div className="w-28 text-[11px] font-medium text-[var(--fw-text-2)] truncate">{f.label}</div>
+                <div className="flex-1 h-1.5 bg-[var(--fw-surface-2)] rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${f.contribution > 15 ? 'bg-[var(--fw-negative)]' : f.contribution > 5 ? 'bg-[var(--fw-warning)]' : 'bg-[var(--fw-positive)]'}`}
+                    style={{ width: `${Math.min(100, (f.contribution / 30) * 100)}%` }}
+                  />
+                </div>
+                <div className="w-12 text-right text-[10px] font-mono tnum text-[var(--fw-text-2)]">+{f.contribution}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+
+      {/* ─── Row 8: Goal Optimizer + Seasonal Decomp + HHI ─────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Goal Optimizer */}
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
+          <div className="flex items-center gap-2 mb-1">
+            <Calculator className="h-4 w-4 text-[var(--fw-accent)]" />
+            <h2 className="text-[14px] font-semibold">Goal Optimizer</h2>
+            <span className="ml-auto text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[var(--fw-accent-soft)] text-[var(--fw-accent)] border border-[var(--fw-accent-border)] uppercase tracking-wider">
+              LP
+            </span>
+          </div>
+          <p className="text-[10px] text-[var(--fw-text-3)] mb-3">{data.goalOptimizer.strategy}</p>
+
+          <div className="space-y-2.5">
+            {data.goalOptimizer.allocations.map((g: any) => (
+              <div key={g.id} className="p-2.5 rounded-lg bg-[var(--fw-surface-2)] border border-[var(--fw-border)]">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[12px] font-medium truncate">{g.name}</span>
+                  {g.improvementDays > 0 && (
+                    <span className="text-[10px] font-mono tnum text-[var(--fw-positive)] font-semibold flex-shrink-0">
+                      -{g.improvementDays}d
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                  <div>
+                    <div className="text-[var(--fw-text-3)] mb-0.5">Current</div>
+                    <div className="font-mono tnum text-[var(--fw-text-2)]">{fmt(g.currentAllocation)}/mo</div>
+                    <div className="text-[9px] text-[var(--fw-text-3)] mt-0.5">{g.monthsToComplete} mo</div>
+                  </div>
+                  <div>
+                    <div className="text-[var(--fw-accent)] mb-0.5">Optimal</div>
+                    <div className="font-mono tnum text-[var(--fw-accent)] font-semibold">{fmt(g.optimalAllocation)}/mo</div>
+                    <div className="text-[9px] text-[var(--fw-text-3)] mt-0.5">{g.optimalMonthsToComplete} mo</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* Seasonal Decomposition */}
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
+          <div className="flex items-center gap-2 mb-1">
+            <Activity className="h-4 w-4 text-[var(--fw-text-2)]" />
+            <h2 className="text-[14px] font-semibold">Seasonal Decomposition</h2>
+            <span className="ml-auto text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[var(--fw-surface-2)] text-[var(--fw-text-3)] border border-[var(--fw-border)] uppercase tracking-wider">
+              7d period
+            </span>
+          </div>
+          <p className="text-[10px] text-[var(--fw-text-3)] mb-3">Trend + Seasonal + Residual (additive model)</p>
+
+          <div className="h-48 -mx-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={data.seasonalDecomposition}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--fw-border)" strokeOpacity={0.4} vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--fw-text-3)' }} tickLine={false} axisLine={false} interval={4} />
+                <YAxis tick={{ fontSize: 9, fill: 'var(--fw-text-3)' }} tickLine={false} axisLine={false} tickFormatter={(v) => fmt(v, { compact: true })} width={36} />
+                <Tooltip
+                  formatter={(value: any, name: any) => {
+                    if (typeof value !== 'number' || isNaN(value)) return ''
+                    const labels: Record<string, string> = { observed: 'Observed', trend: 'Trend', seasonal: 'Seasonal', residual: 'Residual' }
+                    return [fmt(value), labels[name] || name]
+                  }}
+                  contentStyle={{ fontSize: '10px', borderRadius: '6px', padding: '6px 8px', border: '1px solid var(--fw-border)', background: 'var(--fw-surface)' }}
+                />
+                <Legend wrapperStyle={{ fontSize: '10px' }} />
+                <Line type="monotone" dataKey="observed" stroke="var(--fw-text-3)" strokeWidth={1} dot={false} name="observed" />
+                <Line type="monotone" dataKey="trend" stroke="var(--fw-accent)" strokeWidth={2} dot={false} name="trend" />
+                <Line type="monotone" dataKey="seasonal" stroke="var(--fw-warning)" strokeWidth={1.5} dot={false} name="seasonal" />
+                <Line type="monotone" dataKey="residual" stroke="var(--fw-text-4)" strokeWidth={1} strokeDasharray="3 3" dot={false} name="residual" />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+
+        {/* Merchant Concentration */}
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
+          <div className="flex items-center gap-2 mb-1">
+            <BarChart3 className="h-4 w-4 text-[var(--fw-text-2)]" />
+            <h2 className="text-[14px] font-semibold">Merchant Concentration</h2>
+            <span className="ml-auto text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[var(--fw-surface-2)] text-[var(--fw-text-3)] border border-[var(--fw-border)] uppercase tracking-wider">
+              HHI
+            </span>
+          </div>
+          <p className="text-[10px] text-[var(--fw-text-3)] mb-3">Herfindahl-Hirschman Index</p>
+
+          {/* HHI score */}
+          <div className="flex items-baseline gap-2 mb-2">
+            <span className="text-[26px] font-bold tnum" style={{
+              color: data.merchantConcentration.hhi < 1500 ? 'var(--fw-positive)' : data.merchantConcentration.hhi < 2500 ? 'var(--fw-warning)' : 'var(--fw-negative)'
+            }}>
+              {data.merchantConcentration.hhi}
+            </span>
+            <span className="text-[10px] text-[var(--fw-text-3)]">/ 10000</span>
+          </div>
+          <div className="text-[11px] text-[var(--fw-text-2)] mb-3 leading-relaxed">{data.merchantConcentration.interpretation}</div>
+
+          {/* Concentration bar */}
+          <div className="h-2 bg-[var(--fw-surface-2)] rounded-full overflow-hidden mb-1">
+            <div
+              className={`h-full rounded-full ${data.merchantConcentration.hhi < 1500 ? 'bg-[var(--fw-positive)]' : data.merchantConcentration.hhi < 2500 ? 'bg-[var(--fw-warning)]' : 'bg-[var(--fw-negative)]'}`}
+              style={{ width: `${Math.min(100, (data.merchantConcentration.hhi / 5000) * 100)}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-[9px] text-[var(--fw-text-4)] mb-3">
+            <span>0</span><span>1500</span><span>2500</span><span>5000+</span>
+          </div>
+
+          {/* Top merchants */}
+          <div className="space-y-1.5">
+            <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">Top merchants</div>
+            {data.merchantConcentration.topMerchants.map((m: any) => (
+              <div key={m.rank} className="flex items-center gap-2 text-[11px]">
+                <span className="w-4 text-[var(--fw-text-3)] font-mono">{m.rank}</span>
+                <span className="flex-1 truncate text-[var(--fw-text-2)]">{m.merchant}</span>
+                <span className="font-mono tnum text-[var(--fw-text-2)] font-medium">{m.share}%</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+
       {/* Assumptions footer */}
       <Card className="p-4 bg-[var(--fw-surface-2)] border-[var(--fw-border)] rounded-xl">
         <div className="flex items-center gap-2 mb-2">
@@ -2363,16 +2671,16 @@ function AnalyticsView({ data, loading, onRefresh }: {
             <div className="font-mono tnum text-[var(--fw-text-2)] font-medium">{(assumptions.investmentReturnRate * 100).toFixed(0)}% / yr</div>
           </div>
           <div>
-            <div className="text-[var(--fw-text-3)]">Forecast horizon</div>
-            <div className="font-mono tnum text-[var(--fw-text-2)] font-medium">{assumptions.forecastHorizon} days</div>
+            <div className="text-[var(--fw-text-3)]">14-day forecast</div>
+            <div className="font-mono tnum text-[var(--fw-text-2)] font-medium">Holt-Winters</div>
           </div>
           <div>
-            <div className="text-[var(--fw-text-3)]">Forecast model</div>
-            <div className="font-mono text-[var(--fw-text-2)] font-medium">Holt-Winters</div>
+            <div className="text-[var(--fw-text-3)]">5-yr Monte Carlo</div>
+            <div className="font-mono tnum text-[var(--fw-text-2)] font-medium">{assumptions.monteCarloTrials} trials · {(assumptions.monteCarloVolatility * 100).toFixed(0)}% vol</div>
           </div>
           <div>
-            <div className="text-[var(--fw-text-3)]">Monte Carlo trials</div>
-            <div className="font-mono tnum text-[var(--fw-text-2)] font-medium">1,000</div>
+            <div className="text-[var(--fw-text-3)]">Seasonal period</div>
+            <div className="font-mono tnum text-[var(--fw-text-2)] font-medium">{assumptions.seasonalPeriod} days</div>
           </div>
         </div>
       </Card>
