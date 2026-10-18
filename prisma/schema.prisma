@@ -1,0 +1,136 @@
+// Personal Finance Assistant AI Agent — Prisma schema
+// Topic A: PBCSF International Track
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  tier      String   @default("Viewer") // Viewer | Editor | Approver
+  privacyMode Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions    Transaction[]
+  budgets         Budget[]
+  goals           Goal[]
+  conversations   Conversation[]
+  recommendations Recommendation[]
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique // e.g. "dining", "groceries", "transport"
+  icon      String?
+  color     String   // hex color for charts
+  createdAt DateTime @default(now())
+
+  transactions Transaction[]
+  budgets      Budget[]
+}
+
+model Transaction {
+  id             String   @id @default(cuid())
+  userId         String
+  categoryId     String
+  date           DateTime
+  amountCents    Int      // positive integer; direction tracked separately
+  direction      String   @default("debit") // debit | credit
+  currency       String   @default("USD")
+  merchantRaw    String
+  merchantNorm   String
+  memo           String?
+  source         String   @default("csv") // csv | pdf | ocr | voice | manual
+  confidence     Float    @default(1.0)
+  recurring      Boolean  @default(false)
+  anomaly        Boolean  @default(false)
+  anomalyScore   Float?
+  createdAt      DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@index([userId, date])
+  @@index([userId, categoryId])
+}
+
+model Budget {
+  id           String  @id @default(cuid())
+  userId       String
+  categoryId   String
+  amountCents  Int     // monthly envelope allocation
+  month        String  // "2026-04" format
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@unique([userId, categoryId, month])
+}
+
+model Goal {
+  id           String   @id @default(cuid())
+  userId       String
+  name         String   // e.g. "Trip to Japan"
+  targetCents  Int
+  savedCents   Int      @default(0)
+  monthlyContributionCents Int
+  targetDate   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Conversation {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String   @default("New conversation")
+  mode      String   @default("quick_qa") // quick_qa | monthly_review | goal_planning
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@index([userId, updatedAt])
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  role           String   // user | assistant | tool
+  content        String
+  toolCalls      String?  // JSON string of tool invocations
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
+model Recommendation {
+  id           String   @id @default(cuid())
+  userId       String
+  template     String   // "cancel_subscription" | "defer_purchase" | "rebalance_budget" etc.
+  title        String
+  detail       String
+  impactCents  Int      // estimated annual savings
+  confidence   String   @default("high") // high | medium | low
+  evidence     String   // JSON string with transaction references
+  status       String   @default("pending") // pending | accepted | dismissed
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+}
