@@ -395,9 +395,12 @@ export default function Home() {
             </button>
 
             {/* Privacy */}
-            <button
+            <div
+              role="button"
+              tabIndex={0}
               onClick={() => setPrivacyMode(!privacyMode)}
-              className="flex items-center gap-2 px-3 h-8 rounded-md border border-[var(--fw-border)] bg-[var(--fw-surface)] hover:bg-[var(--fw-surface-2)] transition-colors fw-focus"
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPrivacyMode(!privacyMode) } }}
+              className="flex items-center gap-2 px-3 h-8 rounded-md border border-[var(--fw-border)] bg-[var(--fw-surface)] hover:bg-[var(--fw-surface-2)] transition-colors fw-focus cursor-pointer"
             >
               {privacyMode ? (
                 <Lock className="h-3.5 w-3.5 text-[var(--fw-accent)]" />
@@ -407,8 +410,8 @@ export default function Home() {
               <span className="text-[11px] font-medium text-[var(--fw-text-2)] hidden sm:inline">
                 {privacyMode ? 'Local' : 'Cloud'}
               </span>
-              <Switch checked={privacyMode} onCheckedChange={setPrivacyMode} className="scale-75 data-[state=checked]:bg-[var(--fw-accent)]" />
-            </button>
+              <Switch checked={privacyMode} onCheckedChange={setPrivacyMode} className="scale-75 data-[state=checked]:bg-[var(--fw-accent)] pointer-events-none" />
+            </div>
 
             {/* Permission tier */}
             <Select value={tier} onValueChange={(v) => setTier(v as Tier)}>
