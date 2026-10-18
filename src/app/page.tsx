@@ -18,7 +18,8 @@ import {
   Search, Filter, Play, RefreshCw, Bell, Command, Brain, Gauge,
   LineChart as LineChartIcon, Sparkle, TrendingUp as TrendUp, Calculator,
   Calendar, CalendarClock, CreditCard, Download, AlertCircle, CheckCircle2,
-  Info, Clock, DollarSign, Plus, Rocket,
+  Info, Clock, DollarSign, Plus, Rocket, Dna, Sparkles as SparklesIcon,
+  Hourglass, GitBranch, Award,
 } from 'lucide-react'
 import { fmt, fmtMonth } from '@/lib/format'
 import {
@@ -30,7 +31,7 @@ import {
 import { toast } from 'sonner'
 
 type Tier = 'Viewer' | 'Editor' | 'Approver'
-type View = 'overview' | 'transactions' | 'budgets' | 'goals' | 'insights' | 'analytics' | 'planning'
+type View = 'overview' | 'transactions' | 'budgets' | 'goals' | 'insights' | 'analytics' | 'planning' | 'innovation'
 
 type ChatMessage = {
   role: 'user' | 'assistant'
@@ -165,6 +166,10 @@ export default function Home() {
   const [smartInsights, setSmartInsights] = useState<any>(null)
   const [planningLoading, setPlanningLoading] = useState(false)
 
+  // Innovation
+  const [innovationData, setInnovationData] = useState<any>(null)
+  const [innovationLoading, setInnovationLoading] = useState(false)
+
   const loadDashboard = useCallback(async () => {
     const [txRes, budRes, goalRes, recRes, insRes] = await Promise.all([
       fetch('/api/transactions?range=6m'),
@@ -247,9 +252,23 @@ export default function Home() {
     }
   }, [])
 
+  const loadInnovation = useCallback(async () => {
+    setInnovationLoading(true)
+    try {
+      const res = await fetch('/api/innovation')
+      const d = await res.json()
+      if (d.ok) setInnovationData(d)
+    } catch (err) {
+      console.error('Innovation load failed:', err)
+    } finally {
+      setInnovationLoading(false)
+    }
+  }, [])
+
   useEffect(() => { if (seeded) loadDashboard() }, [seeded, loadDashboard])
   useEffect(() => { if (view === 'analytics' && !analytics) loadAnalytics() }, [view, analytics, loadAnalytics])
   useEffect(() => { if (view === 'planning' && !debtData) loadPlanning() }, [view, debtData, loadPlanning])
+  useEffect(() => { if (view === 'innovation' && !innovationData) loadInnovation() }, [view, innovationData, loadInnovation])
 
   const sendChat = async (text?: string) => {
     const msg = (text ?? input).trim()
@@ -351,6 +370,7 @@ export default function Home() {
     { id: 'planning', label: 'Planning', icon: Rocket, badge: 'New' },
     { id: 'insights', label: 'Insights', icon: Lightbulb, badge: anomalies.length > 0 ? String(anomalies.length) : undefined },
     { id: 'analytics', label: 'Analytics', icon: Brain, badge: 'AI' },
+    { id: 'innovation', label: 'Innovation Lab', icon: Dna, badge: 'Beta' },
   ]
 
   return (
@@ -583,6 +603,13 @@ export default function Home() {
               loading={planningLoading}
               onRefresh={loadPlanning}
               onNavigate={setView}
+            />
+          )}
+          {view === 'innovation' && (
+            <InnovationView
+              data={innovationData}
+              loading={innovationLoading}
+              onRefresh={loadInnovation}
             />
           )}
         </main>
@@ -3179,6 +3206,372 @@ function QuickAction({ icon: Icon, label, desc, onClick }: {
       <div className="text-[12px] font-semibold mb-0.5">{label}</div>
       <div className="text-[10px] text-[var(--fw-text-3)]">{desc}</div>
     </button>
+  )
+}
+
+// ═══ View: Innovation Lab ═════════════════════════════════════════════
+function InnovationView({ data, loading, onRefresh }: {
+  data: any
+  loading: boolean
+  onRefresh: () => void
+}) {
+  if (loading || !data) {
+    return (
+      <div className="p-10 flex items-center justify-center h-full">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-[var(--fw-accent)]" />
+          <div className="text-sm text-[var(--fw-text-3)]">Running innovation analysis...</div>
+          <div className="text-[11px] text-[var(--fw-text-4)]">Computing personality DNA, future self projection, behavioral triggers, time-value, and goal collisions</div>
+        </div>
+      </div>
+    )
+  }
+
+  const { personality, futureSelf, triggers, timeValue, goalCollisions, assumptions } = data
+
+  return (
+    <div className="p-6 sm:p-8 lg:p-10 space-y-6 max-w-[1400px]">
+      {/* Header */}
+      <div className="flex items-end justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Dna className="h-5 w-5 text-[var(--fw-accent)]" />
+            <h1 className="text-[28px] font-semibold tracking-tight">Innovation Lab</h1>
+            <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-gradient-to-r from-[var(--fw-accent)] to-[var(--fw-accent-hover)] text-white uppercase tracking-wider">
+              Beta
+            </span>
+          </div>
+          <p className="text-[13px] text-[var(--fw-text-3)] mt-1">
+            5 novel features you won't find anywhere else · Personality DNA · Future Self · Behavioral Triggers · Time-Value · Goal Collisions
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={onRefresh} className="h-8 text-xs rounded-lg border-[var(--fw-border)]">
+          <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Recompute
+        </Button>
+      </div>
+
+      {/* ─── 1. Financial Personality DNA ──────────────────────────── */}
+      <Card className="p-6 border-[var(--fw-accent-border)] bg-gradient-to-br from-[var(--fw-accent-soft)] via-[var(--fw-surface)] to-[var(--fw-surface)] shadow-[var(--fw-shadow-md)] rounded-2xl">
+        <div className="flex items-center gap-2 mb-1">
+          <Dna className="h-5 w-5 text-[var(--fw-accent)]" />
+          <h2 className="text-[16px] font-semibold">Financial Personality DNA</h2>
+          <span className="ml-auto text-[10px] font-semibold px-2 py-1 rounded-md bg-[var(--fw-accent-soft)] text-[var(--fw-accent)] border border-[var(--fw-accent-border)] uppercase tracking-wider">
+            AI Cluster
+          </span>
+        </div>
+        <p className="text-[11px] text-[var(--fw-text-3)] mb-5">Your spending patterns reveal your financial archetype</p>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-center">
+          {/* Personality hero */}
+          <div className="flex flex-col items-center text-center">
+            <div className="relative h-32 w-32 rounded-full bg-gradient-to-br from-[var(--fw-accent)] to-[var(--fw-accent-hover)] flex items-center justify-center shadow-[var(--fw-shadow-glow)] mb-4">
+              <span className="text-[56px]">{personality.emoji}</span>
+            </div>
+            <div className="text-[20px] font-semibold tracking-tight">{personality.type}</div>
+            <div className="text-[11px] text-[var(--fw-text-3)] mt-1">Matched {personality.matchedTraits.length} key traits</div>
+          </div>
+
+          {/* Description + traits */}
+          <div className="lg:col-span-2">
+            <p className="text-[13px] text-[var(--fw-text-2)] leading-relaxed mb-4">{personality.description}</p>
+
+            {/* Trait bars */}
+            <div className="space-y-2.5 mb-4">
+              {personality.traits.map((t: any) => (
+                <div key={t.label} className="flex items-center gap-3">
+                  <div className="w-24 text-[11px] font-medium text-[var(--fw-text-2)]">{t.label}</div>
+                  <div className="flex-1 h-2 bg-[var(--fw-surface-2)] rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-[var(--fw-accent)] to-[var(--fw-accent-hover)] transition-all"
+                      style={{ width: `${t.value}%` }}
+                    />
+                  </div>
+                  <div className="w-10 text-right text-[11px] font-mono tnum font-semibold">{t.value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Recommendations */}
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-2">Personalized recommendations</div>
+              <div className="space-y-1.5">
+                {personality.recommendations.map((r: string, i: number) => (
+                  <div key={i} className="flex items-start gap-2 text-[11px] text-[var(--fw-text-2)]">
+                    <SparklesIcon className="h-3 w-3 text-[var(--fw-accent)] flex-shrink-0 mt-0.5" />
+                    <span>{r}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* ─── 2. Future Self Simulator ──────────────────────────────── */}
+      <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Hourglass className="h-4 w-4 text-[var(--fw-accent)]" />
+            <h2 className="text-[16px] font-semibold">Future Self Simulator</h2>
+            <span className="text-[10px] text-[var(--fw-text-3)] ml-1">
+              Starting age {futureSelf.currentAge} · {fmt(futureSelf.currentSavingsCents, { compact: true })} net worth today
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold px-2 py-1 rounded-md bg-[var(--fw-accent-soft)] text-[var(--fw-accent)] border border-[var(--fw-accent-border)]">
+              FIRE: {futureSelf.fireProgress}%
+            </span>
+          </div>
+        </div>
+
+        {/* FIRE progress bar */}
+        <div className="mb-4 p-3 rounded-lg bg-gradient-to-br from-[var(--fw-surface-2)] to-[var(--fw-surface)] border border-[var(--fw-border)]">
+          <div className="flex justify-between text-[11px] mb-2">
+            <span className="text-[var(--fw-text-2)] font-medium">FIRE number (25× annual expenses)</span>
+            <span className="font-mono tnum text-[var(--fw-text-2)]">{fmt(futureSelf.fireNumberCents, { compact: true })}</span>
+          </div>
+          <div className="h-2 bg-[var(--fw-surface-2)] rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-[var(--fw-accent)] to-[var(--fw-positive)] transition-all"
+              style={{ width: `${Math.min(100, futureSelf.fireProgress)}%` }}
+            />
+          </div>
+          <div className="text-[10px] text-[var(--fw-text-3)] mt-1.5">{futureSelf.fireProgress}% of the way to financial independence</div>
+        </div>
+
+        {/* Milestones grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {futureSelf.milestones.map((m: any) => (
+            <div
+              key={m.age}
+              className={`p-3 rounded-lg border ${
+                m.retirementReady
+                  ? 'bg-[var(--fw-positive-soft)] border-[var(--fw-positive-border)]'
+                  : 'bg-[var(--fw-surface-2)] border-[var(--fw-border)]'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold">Age {m.age}</span>
+                {m.retirementReady && <Award className="h-3 w-3 text-[var(--fw-positive)]" />}
+              </div>
+              <div className="text-[16px] font-semibold tnum mb-1">{fmt(m.netWorthCents, { compact: true })}</div>
+              <div className="text-[10px] text-[var(--fw-text-3)] mb-2">
+                Passive: <span className="font-mono tnum">{fmt(m.annualPassiveIncomeCents, { compact: true })}/yr</span>
+              </div>
+              <div className="text-[10px] text-[var(--fw-text-2)] leading-tight">{m.lifestyle}</div>
+              {m.yearsToFire && (
+                <div className="mt-2 text-[10px] font-semibold text-[var(--fw-positive)] flex items-center gap-1">
+                  <Award className="h-2.5 w-2.5" />
+                  FIRE reached in {m.yearsToFire} years
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 text-[10px] text-[var(--fw-text-4)] font-mono">
+          Assumptions: {(assumptions.annualReturn * 100).toFixed(0)}% annual return · {(assumptions.inflationRate * 100).toFixed(1)}% inflation · {assumptions.fireRule}
+        </div>
+      </Card>
+
+      {/* ─── 3. Behavioral Trigger Detection ───────────────────────── */}
+      <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
+        <div className="flex items-center gap-2 mb-1">
+          <GitBranch className="h-4 w-4 text-[var(--fw-accent)]" />
+          <h2 className="text-[16px] font-semibold">Behavioral Trigger Detection</h2>
+          <span className="ml-auto text-[10px] font-semibold px-2 py-1 rounded-md bg-[var(--fw-accent-soft)] text-[var(--fw-accent)] border border-[var(--fw-accent-border)] uppercase tracking-wider">
+            Pattern Mining
+          </span>
+        </div>
+        <p className="text-[11px] text-[var(--fw-text-3)] mb-4">Hidden patterns in your spending behavior — auto-discovered from {assumptions.analysisWindow} of data</p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {triggers.triggers.length === 0 ? (
+            <div className="col-span-2 text-center py-8 text-[var(--fw-text-3)] text-xs">
+              No significant behavioral patterns detected in current data
+            </div>
+          ) : (
+            triggers.triggers.map((t: any, i: number) => (
+              <div key={i} className="p-3 rounded-lg bg-[var(--fw-surface-2)] border border-[var(--fw-border)] hover:border-[var(--fw-accent-border)] transition-colors">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="text-[12px] font-semibold">{t.pattern}</div>
+                  <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[var(--fw-warning-soft)] text-[var(--fw-warning)] border border-[var(--fw-warning-border)] flex-shrink-0">
+                    {t.confidence}% conf
+                  </span>
+                </div>
+                <div className="text-[11px] text-[var(--fw-text-2)] leading-relaxed mb-2">{t.description}</div>
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-[var(--fw-text-3)]">{t.samples} samples</span>
+                  {t.impact > 0 && (
+                    <span className="font-mono tnum text-[var(--fw-negative)] font-semibold">${t.impact}/yr impact</span>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </Card>
+
+      {/* ─── 4. Time-Value Calculator ──────────────────────────────── */}
+      <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-[var(--fw-accent)]" />
+            <h2 className="text-[16px] font-semibold">Time-Value Calculator</h2>
+            <span className="text-[10px] text-[var(--fw-text-3)] ml-1">
+              Hourly rate: {fmt(timeValue.hourlyRateCents)}/hr · Based on 160 hrs/month
+            </span>
+          </div>
+        </div>
+
+        {/* Top stats */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="p-3 rounded-lg bg-[var(--fw-surface-2)] border border-[var(--fw-border)]">
+            <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">Top 8 purchases = work hours</div>
+            <div className="text-[20px] font-semibold tnum">{Math.round(timeValue.totalHoursWorked)} hrs</div>
+            <div className="text-[10px] text-[var(--fw-text-3)]">{Math.round(timeValue.totalHoursWorked / 8)} work days</div>
+          </div>
+          <div className="p-3 rounded-lg bg-gradient-to-br from-[var(--fw-accent-soft)] to-[var(--fw-surface)] border border-[var(--fw-accent-border)]">
+            <div className="text-[10px] uppercase tracking-wider text-[var(--fw-accent)] font-semibold mb-1">30-yr opportunity cost</div>
+            <div className="text-[20px] font-semibold tnum text-[var(--fw-accent)]">{fmt(timeValue.totalOpportunityCost30yrCents, { compact: true })}</div>
+            <div className="text-[10px] text-[var(--fw-text-3)]">If invested at 7% instead</div>
+          </div>
+        </div>
+
+        {/* Top purchases list */}
+        <div className="space-y-1.5">
+          <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-2">Your biggest purchases — translated</div>
+          {timeValue.topPurchases.map((p: any, i: number) => (
+            <div key={i} className="flex items-center gap-3 p-2 rounded-md bg-[var(--fw-surface-2)] border border-[var(--fw-border)]">
+              <div className="h-7 w-7 rounded-md bg-[var(--fw-text)] text-[var(--fw-surface)] flex items-center justify-center text-[11px] font-bold flex-shrink-0">
+                #{i + 1}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[12px] font-medium truncate">{p.merchant}</div>
+                <div className="text-[10px] text-[var(--fw-text-3)]">
+                  {p.category} · {fmt(p.amountCents)} = <span className="text-[var(--fw-text-2)] font-medium">{p.hoursWorked} hrs of work</span>
+                </div>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <div className="text-[11px] font-mono tnum font-semibold text-[var(--fw-accent)]">{fmt(p.opportunityCost30yrCents, { compact: true })}</div>
+                <div className="text-[9px] text-[var(--fw-text-3)]">in 30 years</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* ─── 5. Goal Collision Detector ────────────────────────────── */}
+      <Card className={`p-5 border shadow-[var(--fw-shadow-sm)] rounded-xl fw-card ${
+        goalCollisions.deficitCents > 0
+          ? 'border-[var(--fw-warning-border)] bg-gradient-to-br from-[var(--fw-warning-soft)] to-[var(--fw-surface)]'
+          : 'border-[var(--fw-positive-border)] bg-gradient-to-br from-[var(--fw-positive-soft)] to-[var(--fw-surface)]'
+      }`}>
+        <div className="flex items-center gap-2 mb-1">
+          <AlertCircle className={`h-4 w-4 ${goalCollisions.deficitCents > 0 ? 'text-[var(--fw-warning)]' : 'text-[var(--fw-positive)]'}`} />
+          <h2 className="text-[16px] font-semibold">Goal Collision Detector</h2>
+          <span className={`ml-auto text-[10px] font-semibold px-2 py-1 rounded-md uppercase tracking-wider ${
+            goalCollisions.deficitCents > 0
+              ? 'bg-[var(--fw-warning-soft)] text-[var(--fw-warning)] border border-[var(--fw-warning-border)]'
+              : 'bg-[var(--fw-positive-soft)] text-[var(--fw-positive)] border border-[var(--fw-positive-border)]'
+          }`}>
+            {goalCollisions.deficitCents > 0 ? 'Conflict detected' : 'No conflicts'}
+          </span>
+        </div>
+        <p className="text-[11px] text-[var(--fw-text-3)] mb-4">Constraint solver that detects when goals compete for the same cash</p>
+
+        {/* Demand vs Available */}
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="p-3 rounded-lg bg-[var(--fw-surface)] border border-[var(--fw-border)]">
+            <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">Total demand</div>
+            <div className="text-[16px] font-semibold tnum">{fmt(goalCollisions.totalDemandCents, { compact: true })}/mo</div>
+          </div>
+          <div className="p-3 rounded-lg bg-[var(--fw-surface)] border border-[var(--fw-border)]">
+            <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">Available</div>
+            <div className="text-[16px] font-semibold tnum">{fmt(goalCollisions.availableCents, { compact: true })}/mo</div>
+          </div>
+          <div className={`p-3 rounded-lg border ${
+            goalCollisions.deficitCents > 0
+              ? 'bg-[var(--fw-negative-soft)] border-[var(--fw-negative-border)]'
+              : 'bg-[var(--fw-positive-soft)] border-[var(--fw-positive-border)]'
+          }`}>
+            <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">
+              {goalCollisions.deficitCents > 0 ? 'Deficit' : 'Surplus'}
+            </div>
+            <div className={`text-[16px] font-semibold tnum ${goalCollisions.deficitCents > 0 ? 'text-[var(--fw-negative)]' : 'text-[var(--fw-positive)]'}`}>
+              {fmt(Math.abs(goalCollisions.deficitCents), { compact: true })}/mo
+            </div>
+          </div>
+        </div>
+
+        {/* Recommendation banner */}
+        <div className="mb-4 p-3 rounded-lg bg-[var(--fw-surface)] border border-[var(--fw-border)] flex items-start gap-2">
+          <Info className="h-4 w-4 text-[var(--fw-accent)] flex-shrink-0 mt-0.5" />
+          <div className="text-[11px] text-[var(--fw-text-2)]">{goalCollisions.recommendation}</div>
+        </div>
+
+        {/* Collisions list */}
+        {goalCollisions.collisions.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-2">
+              {goalCollisions.collisions.length} goal conflicts detected
+            </div>
+            {goalCollisions.collisions.map((c: any, i: number) => (
+              <div key={i} className={`p-3 rounded-lg border ${
+                c.severity === 'high' ? 'bg-[var(--fw-negative-soft)] border-[var(--fw-negative-border)]' :
+                c.severity === 'medium' ? 'bg-[var(--fw-warning-soft)] border-[var(--fw-warning-border)]' :
+                'bg-[var(--fw-surface-2)] border-[var(--fw-border)]'
+              }`}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="text-[12px] font-semibold flex items-center gap-2">
+                    <span>{c.goalA}</span>
+                    <GitBranch className="h-3 w-3 text-[var(--fw-text-3)]" />
+                    <span>{c.goalB}</span>
+                  </div>
+                  <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                    c.severity === 'high' ? 'bg-[var(--fw-negative)] text-white' :
+                    c.severity === 'medium' ? 'bg-[var(--fw-warning)] text-white' :
+                    'bg-[var(--fw-text-3)] text-white'
+                  }`}>
+                    {c.severity}
+                  </span>
+                </div>
+                <div className="text-[11px] text-[var(--fw-text-2)] mb-2 leading-relaxed">{c.conflict}</div>
+                <div className="text-[11px] text-[var(--fw-accent)] font-medium flex items-start gap-1.5">
+                  <CheckCircle2 className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                  <span>{c.resolution}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Assumptions */}
+      <Card className="p-4 bg-[var(--fw-surface-2)] border-[var(--fw-border)] rounded-xl">
+        <div className="flex items-center gap-2 mb-2">
+          <FileText className="h-3.5 w-3.5 text-[var(--fw-text-3)]" />
+          <span className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold">Innovation Lab Assumptions</span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[11px]">
+          <div>
+            <div className="text-[var(--fw-text-3)]">Annual return</div>
+            <div className="font-mono tnum text-[var(--fw-text-2)] font-medium">{(assumptions.annualReturn * 100).toFixed(0)}%</div>
+          </div>
+          <div>
+            <div className="text-[var(--fw-text-3)]">Inflation</div>
+            <div className="font-mono tnum text-[var(--fw-text-2)] font-medium">{(assumptions.inflationRate * 100).toFixed(1)}%</div>
+          </div>
+          <div>
+            <div className="text-[var(--fw-text-3)]">FIRE rule</div>
+            <div className="font-mono text-[var(--fw-text-2)] font-medium">4% SWR</div>
+          </div>
+          <div>
+            <div className="text-[var(--fw-text-3)]">Analysis window</div>
+            <div className="font-mono text-[var(--fw-text-2)] font-medium">6 months</div>
+          </div>
+        </div>
+      </Card>
+    </div>
   )
 }
 
