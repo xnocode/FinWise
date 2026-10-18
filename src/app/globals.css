@@ -118,5 +118,73 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "ss01", "cv11", "tnum";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
+
+/* ─── FinWise professional design tokens ─────────────────────────────── */
+:root {
+  --fw-bg: #fafafa;
+  --fw-surface: #ffffff;
+  --fw-surface-2: #f5f5f4;
+  --fw-border: #e7e5e4;
+  --fw-border-strong: #d6d3d1;
+  --fw-text: #1c1917;
+  --fw-text-2: #57534e;
+  --fw-text-3: #a8a29e;
+  --fw-accent: #0f766e;          /* deep teal — sophisticated, trustworthy */
+  --fw-accent-soft: #ccfbf1;
+  --fw-accent-hover: #115e59;
+  --fw-positive: #15803d;
+  --fw-positive-soft: #dcfce7;
+  --fw-negative: #b91c1c;
+  --fw-negative-soft: #fee2e2;
+  --fw-warning: #b45309;
+  --fw-warning-soft: #fef3c7;
+  --fw-neutral: #475569;
+  --fw-shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
+  --fw-shadow-md: 0 1px 3px 0 rgba(15, 23, 42, 0.06), 0 1px 2px -1px rgba(15, 23, 42, 0.04);
+  --fw-shadow-lg: 0 4px 12px -2px rgba(15, 23, 42, 0.06), 0 2px 6px -2px rgba(15, 23, 42, 0.04);
+}
+
+.dark {
+  --fw-bg: #0a0a0a;
+  --fw-surface: #141414;
+  --fw-surface-2: #1c1917;
+  --fw-border: #292524;
+  --fw-border-strong: #44403c;
+  --fw-text: #fafaf9;
+  --fw-text-2: #d6d3d1;
+  --fw-text-3: #78716c;
+  --fw-accent: #2dd4bf;
+  --fw-accent-soft: #134e4a;
+  --fw-accent-hover: #5eead4;
+  --fw-positive: #4ade80;
+  --fw-positive-soft: #14532d;
+  --fw-negative: #f87171;
+  --fw-negative-soft: #450a0a;
+  --fw-warning: #fbbf24;
+  --fw-warning-soft: #451a03;
+  --fw-neutral: #94a3b8;
+  --fw-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --fw-shadow-md: 0 1px 3px 0 rgba(0, 0, 0, 0.5);
+  --fw-shadow-lg: 0 4px 12px -2px rgba(0, 0, 0, 0.5);
+}
+
+/* Tabular numerals for all numeric data */
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* Custom scrollbar */
+.fw-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.fw-scroll::-webkit-scrollbar-track { background: transparent; }
+.fw-scroll::-webkit-scrollbar-thumb { background: var(--fw-border-strong); border-radius: 3px; }
+.fw-scroll::-webkit-scrollbar-thumb:hover { background: var(--fw-text-3); }
+
+/* Subtle focus ring */
+.fw-focus:focus-visible {
+  outline: 2px solid var(--fw-accent);
+  outline-offset: 2px;
+}
+
