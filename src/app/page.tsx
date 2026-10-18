@@ -303,9 +303,9 @@ export default function Home() {
   ]
 
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--fw-bg)] text-[var(--fw-text)]">
+    <div className="h-screen flex flex-col overflow-hidden bg-[var(--fw-bg)] text-[var(--fw-text)]">
       {/* ─── Top Bar ──────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-40 border-b border-[var(--fw-border)] fw-glass">
+      <header className="flex-shrink-0 z-40 border-b border-[var(--fw-border)] fw-glass">
         <div className="flex h-14 items-center justify-between gap-4 px-4 sm:px-6">
           {/* Brand */}
           <div className="flex items-center gap-3">
@@ -421,9 +421,9 @@ export default function Home() {
       </header>
 
       {/* ─── Body ──────────────────────────────────────────────────────── */}
-      <div className="flex-1 flex">
+      <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* ─── Sidebar ─────────────────────────────────────────────────── */}
-        <aside className="hidden lg:flex w-60 flex-shrink-0 border-r border-[var(--fw-border)] bg-[var(--fw-surface)] flex-col">
+        <aside className="hidden lg:flex w-60 flex-shrink-0 border-r border-[var(--fw-border)] bg-[var(--fw-surface)] flex-col h-full overflow-y-auto fw-scroll">
           <nav className="flex-1 p-3 space-y-0.5">
             <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--fw-text-4)] font-semibold px-2.5 mb-2">
               Workspace
@@ -490,7 +490,7 @@ export default function Home() {
         </aside>
 
         {/* ─── Main Content ────────────────────────────────────────────── */}
-        <main className="flex-1 min-w-0 overflow-x-hidden">
+        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden fw-scroll h-full">
           {view === 'overview' && (
             <OverviewView
               txns={txns} byCategory={byCategory} byMonth={byMonth}
@@ -516,7 +516,7 @@ export default function Home() {
 
         {/* ─── Chat Slide-over ────────────────────────────────────────── */}
         {chatOpen && (
-          <aside className="hidden xl:flex w-[400px] flex-shrink-0 border-l border-[var(--fw-border)] bg-[var(--fw-surface)] flex-col">
+          <aside className="hidden xl:flex w-[400px] flex-shrink-0 border-l border-[var(--fw-border)] bg-[var(--fw-surface)] flex-col h-full">
             <ChatPanel
               messages={messages} input={input} setInput={setInput}
               chatLoading={chatLoading} sendChat={sendChat}
@@ -555,7 +555,7 @@ export default function Home() {
       <input ref={receiptInputRef} type="file" accept="image/*" onChange={handleReceipt} className="hidden" />
 
       {/* ─── Footer ─────────────────────────────────────────────────────── */}
-      <footer className="border-t border-[var(--fw-border)] bg-[var(--fw-surface)] mt-auto">
+      <footer className="flex-shrink-0 border-t border-[var(--fw-border)] bg-[var(--fw-surface)]">
         <div className="px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 text-[11px]">
           <div className="flex items-center gap-3 text-[var(--fw-text-3)]">
             <span className="font-medium text-[var(--fw-text-2)]">FinWise</span>
@@ -1430,7 +1430,7 @@ function ChatPanel(props: {
       )}
 
       <div className="p-3 border-t border-[var(--fw-border)] bg-[var(--fw-surface)] flex-shrink-0">
-        <div className="flex gap-2 items-end">
+        <div className="flex gap-2 items-center">
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -1440,18 +1440,33 @@ function ChatPanel(props: {
                 sendChat()
               }
             }}
-            placeholder="Ask FinWise..."
-            className="flex-1 h-9 text-[13px] border-[var(--fw-border)] bg-[var(--fw-surface-2)] placeholder:text-[var(--fw-text-3)] rounded-lg"
+            placeholder="Ask FinWise about your finances..."
+            className="flex-1 h-10 text-[13px] border-[var(--fw-border)] bg-[var(--fw-surface-2)] placeholder:text-[var(--fw-text-3)] rounded-lg focus-visible:border-[var(--fw-accent)]"
             disabled={chatLoading}
           />
           <Button
             onClick={() => sendChat()}
             disabled={chatLoading || !input.trim()}
             size="sm"
-            className="h-9 px-3 bg-gradient-to-br from-[var(--fw-accent)] to-[var(--fw-accent-hover)] hover:opacity-90 text-white rounded-lg shadow-[var(--fw-shadow-glow)]"
+            className="h-10 px-4 bg-gradient-to-br from-[var(--fw-accent)] to-[var(--fw-accent-hover)] hover:opacity-90 text-white rounded-lg shadow-[var(--fw-shadow-glow)] font-medium text-[12px] gap-1.5"
           >
-            <Send className="h-3.5 w-3.5" />
+            {chatLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Send className="h-3.5 w-3.5" />
+            )}
+            <span>Send</span>
           </Button>
+        </div>
+        <div className="text-[10px] text-[var(--fw-text-4)] mt-1.5 px-1 flex items-center justify-between">
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.5 rounded bg-[var(--fw-surface-2)] border border-[var(--fw-border)] font-mono text-[9px]">Enter</kbd>
+            <span>to send</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.5 rounded bg-[var(--fw-surface-2)] border border-[var(--fw-border)] font-mono text-[9px]">Shift+Enter</kbd>
+            <span>for new line</span>
+          </span>
         </div>
       </div>
     </>

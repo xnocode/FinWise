@@ -223,3 +223,35 @@ Stage Summary:
 - All cards use consistent rounded-xl + sm shadow + hover-elevation pattern.
 - KPI cards now have colored icon badges + semantic delta colors.
 - Simulation result card uses gradient background to highlight the differentiator feature.
+
+---
+Task ID: 7
+Agent: Z.ai (main)
+Task: Fix chat panel layout — user could not see the send button because the chat panel was getting cut off.
+
+Work Log:
+- Diagnosed issue: outer container used `min-h-screen` which lets the page grow with content, but the chat panel relied on flex inheritance that didn't propagate height correctly. When main content was short, the chat aside collapsed to content height and the input/send button was clipped below the visible viewport.
+- Fix 1: Changed outer container from `min-h-screen flex flex-col` to `h-screen flex flex-col overflow-hidden` — viewport-locked height, no page scroll.
+- Fix 2: Header changed from `sticky top-0` to `flex-shrink-0` (no longer needs sticky since parent is fixed-height).
+- Fix 3: Body row changed from `flex-1 flex` to `flex-1 flex min-h-0 overflow-hidden` — `min-h-0` is critical for flex children to be able to shrink and scroll.
+- Fix 4: Sidebar updated to `h-full overflow-y-auto fw-scroll` — fills height, scrolls internally if needed.
+- Fix 5: Main content updated to `flex-1 min-w-0 overflow-y-auto overflow-x-hidden fw-scroll h-full` — scrolls independently.
+- Fix 6: Chat aside updated to add `h-full` — now fills the body row's height, so its internal flex-col layout (header / messages / quick prompts / input) renders correctly with input always visible at the bottom.
+- Fix 7: Footer changed from `mt-auto` to `flex-shrink-0` — no longer needs margin auto since parent is fixed-height.
+- Fix 8: Redesigned the chat input area for better visibility:
+  - Larger input (h-10 instead of h-9)
+  - Larger Send button (h-10 px-4 instead of h-9 px-3) with explicit "Send" text label (was icon-only)
+  - Loading spinner inside Send button when chatLoading
+  - Added keyboard hint footer: "Enter to send" and "Shift+Enter for new line" with kbd-styled badges
+  - Better focus state with accent border
+- Verified end-to-end:
+  - Send button now visible at all times (confirmed via DOM query)
+  - Chat aside height: 902px (1000px viewport - 56px header - 42px footer) — fills correctly
+  - Typed "Hello FinWise" → Send button enabled → clicked → received response
+  - No console errors, no hydration warnings, lint passes cleanly.
+  - Screenshot: /home/z/my-project/download/finwise-v5-fixed.png
+
+Stage Summary:
+- Fixed the chat panel layout so the input field + Send button are always visible.
+- Each column (sidebar / main / chat) now scrolls independently within a viewport-locked layout.
+- Send button is now larger, labeled with "Send" text, and has keyboard shortcut hints below.
