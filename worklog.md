@@ -159,3 +159,67 @@ Work Log:
 Stage Summary:
 - Fixed the only runtime issue: nested button hydration error in privacy toggle.
 - App is now error-free across all views, all viewport sizes, all interactions.
+
+---
+Task ID: 6
+Agent: Z.ai (main)
+Task: Modernize FinWise design — clean, sleek aesthetic with gradients, glassmorphism, refined typography.
+
+Work Log:
+- Refreshed design tokens in globals.css with modern palette:
+  - Surface system: clean white (#fafafa bg, #ffffff surface, #f4f4f5 surface-2)
+  - Modern indigo-violet accent (#6366f1) replacing teal — sophisticated, modern
+  - Refined semantic colors with soft/border variants for each
+  - Modern chart palette (indigo, emerald, amber, pink, cyan)
+  - 4-tier shadow system (xs/sm/md/lg) + glow shadow for accent elements
+  - Custom radii tokens (8/12/16px)
+  - Full dark mode token support
+- Added modern utilities: .fw-glass (backdrop blur + saturation), .fw-card (smooth transition + hover state), .fw-pulse (keyframe animation for status indicators), .fw-gradient-text
+- Refined scrollbar with hover state transition
+
+- Completely rewrote page.tsx with modern aesthetic:
+  - **Brand**: New gradient logo (indigo-violet gradient with chart-bar SVG icon + glow shadow). Cleaner wordmark + tagline.
+  - **Header**: Glass effect (backdrop-blur), gradient live status pill with pulse animation, refined controls with hover states.
+  - **Privacy toggle**: Now uses accent-soft background when active (subtle indigo tint) with proper aria attributes.
+  - **Sidebar**: 
+    - Active nav items use accent-soft background + accent-border + accent text (instead of plain bg)
+    - Badges use warning-soft with border (instead of plain bg)
+    - NEW: "FinWise Agent" gradient card at bottom of sidebar with description + "Open chat" button (gradient background, glows)
+    - System status footer with icons for each row (DB, Workers, LLM, PII, Latency)
+  - **KPI cards**:
+    - Icon now in colored badge (positive-soft/negative-soft/accent) instead of plain text
+    - "Net Savings" highlight card uses gradient background (accent-soft → surface) with accent-border
+    - Larger 26px tnum values
+    - Refined delta indicators with semantic colors
+  - **Cards**: All cards use rounded-xl (12px), border + sm shadow, hover state elevates to md shadow + stronger border (fw-card class)
+  - **Charts**: 
+    - Tooltips use modern styling (8px radius, sm shadow, themed colors)
+    - Area chart gradients use semantic colors (positive/negative)
+    - Better axis styling (no tick marks, subtle grid)
+  - **Budget cards**: Over-budget cards use negative-soft background with negative-border. Progress bars use gradient for accent color (under budget) and solid for over.
+  - **Goals**: Radial progress uses semantic colors (positive/warning/accent) based on completion percentage
+  - **Simulation result card**: Gradient background (accent-soft → surface) with accent-border. Result stats in 2x2/4-col grid with large 24px tnum values.
+  - **Recommendations**: Confidence badges use semantic soft+border styling. Pending cards hover to stronger border.
+  - **Chat panel**:
+    - Agent avatar uses gradient (indigo-violet) with glow shadow
+    - User bubbles use text color background, assistant uses surface-2 with border
+    - Send button uses gradient with glow shadow
+    - Tool call badges use accent-soft + accent-border + accent text (instead of generic)
+    - Suggested prompts hover to accent-soft + accent-border + accent text
+    - Status pulse animation on Cloud/Local indicator
+  - **Floating chat button**: Gradient (indigo-violet) with lg shadow, hover scales up + glows
+
+- Verified end-to-end with agent-browser:
+  - Page loads cleanly, no errors, no hydration warnings
+  - Modern design renders correctly: gradient logo, glass header, accent-soft active states, gradient agent card in sidebar
+  - Chat works: "How did this month go?" returns "Monthly Financial Review" with structured analysis
+  - Monte Carlo simulation runs successfully and displays result card with gradient background
+  - All 5 views accessible via sidebar
+  - Lint passes cleanly
+
+Stage Summary:
+- Completely modernized the FinWise aesthetic with: gradient accents, glassmorphism header, soft/border color system, modern indigo-violet palette, refined typography hierarchy, smooth hover transitions, glow shadows on key elements.
+- New "FinWise Agent" gradient card in sidebar surfaces the AI capability visually.
+- All cards use consistent rounded-xl + sm shadow + hover-elevation pattern.
+- KPI cards now have colored icon badges + semantic delta colors.
+- Simulation result card uses gradient background to highlight the differentiator feature.

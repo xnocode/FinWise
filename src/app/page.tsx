@@ -14,7 +14,7 @@ import {
   Check, X, Loader2, Lock, ChevronRight, ArrowUpRight, ArrowDownRight,
   Activity, BarChart3, Settings2, Cpu, Database, Zap, FileText,
   LayoutDashboard, ListFilter, PiggyBank, Lightbulb, X as XIcon,
-  Search, Filter, MoreHorizontal, Plus, Play, RefreshCw, Bell,
+  Search, Filter, Play, RefreshCw, Bell, Command,
 } from 'lucide-react'
 import { fmt, fmtMonth } from '@/lib/format'
 import {
@@ -118,7 +118,6 @@ type Subscription = {
 }
 
 export default function Home() {
-  // ─── State ────────────────────────────────────────────────────────────
   const [view, setView] = useState<View>('overview')
   const [tier, setTier] = useState<Tier>('Editor')
   const [privacyMode, setPrivacyMode] = useState(false)
@@ -126,11 +125,10 @@ export default function Home() {
   const [seeding, setSeeding] = useState(false)
   const [chatOpen, setChatOpen] = useState(true)
 
-  // Chat
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: 'assistant',
-      content: "Welcome to FinWise. I'm your AI finance copilot — I analyze your transactions, monitor budgets, run savings simulations, and surface actionable recommendations. Ask me anything, or try one of the suggested prompts below.",
+      content: "Welcome to FinWise. I'm your AI finance copilot — I analyze transactions, monitor budgets, run simulations, and surface recommendations. Ask me anything or try a suggested prompt below.",
       mode: 'quick_qa',
     },
   ])
@@ -138,7 +136,6 @@ export default function Home() {
   const [chatLoading, setChatLoading] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Dashboard
   const [txns, setTxns] = useState<Txn[]>([])
   const [byCategory, setByCategory] = useState<{ name: string; color: string; cents: number; count: number }[]>([])
   const [byMonth, setByMonth] = useState<{ month: string; spendCents: number; incomeCents: number }[]>([])
@@ -148,13 +145,11 @@ export default function Home() {
   const [goals, setGoals] = useState<GoalItem[]>([])
   const [recs, setRecs] = useState<RecItem[]>([])
 
-  // Insights
   const [anomalies, setAnomalies] = useState<Anomaly[]>([])
   const [momDeltas, setMomDeltas] = useState<MoMDelta[]>([])
   const [topMerchants, setTopMerchants] = useState<TopMerchant[]>([])
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
 
-  // ─── Data loaders ─────────────────────────────────────────────────────
   const loadDashboard = useCallback(async () => {
     const [txRes, budRes, goalRes, recRes, insRes] = await Promise.all([
       fetch('/api/transactions?range=6m'),
@@ -171,18 +166,9 @@ export default function Home() {
       setTotalSpend(d.totalSpendCents)
       setTotalIncome(d.totalIncomeCents)
     }
-    if (budRes.ok) {
-      const d = await budRes.json()
-      setBudgets(d.budgets)
-    }
-    if (goalRes.ok) {
-      const d = await goalRes.json()
-      setGoals(d.goals)
-    }
-    if (recRes.ok) {
-      const d = await recRes.json()
-      setRecs(d.recommendations)
-    }
+    if (budRes.ok) { const d = await budRes.json(); setBudgets(d.budgets) }
+    if (goalRes.ok) { const d = await goalRes.json(); setGoals(d.goals) }
+    if (recRes.ok) { const d = await recRes.json(); setRecs(d.recommendations) }
     if (insRes.ok) {
       const d = await insRes.json()
       setAnomalies(d.anomalies)
@@ -213,28 +199,17 @@ export default function Home() {
     }
   }
 
-  useEffect(() => {
-    handleSeed()
-  }, [])
+  useEffect(() => { handleSeed() }, [])
+  useEffect(() => { if (seeded) loadDashboard() }, [seeded, loadDashboard])
 
-  useEffect(() => {
-    if (seeded) loadDashboard()
-  }, [seeded, loadDashboard])
-
-  // ─── Chat ─────────────────────────────────────────────────────────────
   const sendChat = async (text?: string) => {
     const msg = (text ?? input).trim()
     if (!msg || chatLoading) return
     setInput('')
-    const newMsgs: ChatMessage[] = [
-      ...messages,
-      { role: 'user', content: msg },
-    ]
+    const newMsgs: ChatMessage[] = [...messages, { role: 'user', content: msg }]
     setMessages(newMsgs)
     setChatLoading(true)
-    setTimeout(() => {
-      if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }, 50)
+    setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight }, 50)
 
     try {
       const res = await fetch('/api/chat', {
@@ -243,32 +218,20 @@ export default function Home() {
         body: JSON.stringify({
           message: msg,
           history: messages.map(m => ({ role: m.role, content: m.content })),
-          privacyMode,
-          tier,
+          privacyMode, tier,
         }),
       })
       const d = await res.json()
       if (d.ok) {
-        setMessages([
-          ...newMsgs,
-          { role: 'assistant', content: d.response, mode: d.mode, toolCalls: d.toolCalls },
-        ])
+        setMessages([...newMsgs, { role: 'assistant', content: d.response, mode: d.mode, toolCalls: d.toolCalls }])
       } else {
-        setMessages([
-          ...newMsgs,
-          { role: 'assistant', content: `Error: ${d.error || 'unknown'}` },
-        ])
+        setMessages([...newMsgs, { role: 'assistant', content: `Error: ${d.error || 'unknown'}` }])
       }
     } catch (err: any) {
-      setMessages([
-        ...newMsgs,
-        { role: 'assistant', content: `Network error: ${err.message}` },
-      ])
+      setMessages([...newMsgs, { role: 'assistant', content: `Network error: ${err.message}` }])
     } finally {
       setChatLoading(false)
-      setTimeout(() => {
-        if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-      }, 50)
+      setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight }, 50)
     }
   }
 
@@ -279,7 +242,6 @@ export default function Home() {
     { label: 'Cancel subscriptions', text: 'Which subscriptions should I cancel?' },
   ]
 
-  // ─── CSV upload ───────────────────────────────────────────────────────
   const fileInputRef = useRef<HTMLInputElement>(null)
   const handleCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -292,16 +254,11 @@ export default function Home() {
       if (d.ok) {
         toast.success(`Imported ${d.imported} transactions`, { description: file.name })
         await loadDashboard()
-      } else {
-        toast.error(d.error || 'Upload failed')
-      }
-    } catch (err: any) {
-      toast.error(err.message)
-    }
+      } else { toast.error(d.error || 'Upload failed') }
+    } catch (err: any) { toast.error(err.message) }
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  // ─── Receipt OCR ──────────────────────────────────────────────────────
   const receiptInputRef = useRef<HTMLInputElement>(null)
   const handleReceipt = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -312,20 +269,13 @@ export default function Home() {
       const res = await fetch('/api/upload', { method: 'POST', body: fd })
       const d = await res.json()
       if (d.ok) {
-        toast.success('Receipt parsed', {
-          description: `${d.merchant} · ${fmt(d.totalCents)} · ${d.itemCount} items`,
-        })
+        toast.success('Receipt parsed', { description: `${d.merchant} · ${fmt(d.totalCents)} · ${d.itemCount} items` })
         await loadDashboard()
-      } else {
-        toast.error(d.error || 'Receipt parse failed')
-      }
-    } catch (err: any) {
-      toast.error(err.message)
-    }
+      } else { toast.error(d.error || 'Receipt parse failed') }
+    } catch (err: any) { toast.error(err.message) }
     if (receiptInputRef.current) receiptInputRef.current.value = ''
   }
 
-  // ─── Recommendation accept/dismiss ────────────────────────────────────
   const updateRec = async (id: string, status: 'accepted' | 'dismissed') => {
     setRecs(prev => prev.map(r => r.id === id ? { ...r, status } : r))
     try {
@@ -335,12 +285,9 @@ export default function Home() {
         body: JSON.stringify({ id, status }),
       })
       toast.success(status === 'accepted' ? 'Recommendation accepted' : 'Recommendation dismissed')
-    } catch (err: any) {
-      toast.error(err.message)
-    }
+    } catch (err: any) { toast.error(err.message) }
   }
 
-  // Derived values
   const netSavings = totalIncome - totalSpend
   const savingsRate = totalIncome > 0 ? Math.round((netSavings / totalIncome) * 100) : 0
   const totalPendingRecs = recs.filter(r => r.status === 'pending').reduce((s, r) => s + r.impactCents, 0)
@@ -355,59 +302,63 @@ export default function Home() {
     { id: 'insights', label: 'Insights', icon: Lightbulb, badge: anomalies.length > 0 ? String(anomalies.length) : undefined },
   ]
 
-  // ─── Render ───────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen flex flex-col bg-[var(--fw-bg)] text-[var(--fw-text)]">
       {/* ─── Top Bar ──────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-40 border-b border-[var(--fw-border)] bg-[var(--fw-surface)]/95 backdrop-blur-md">
+      <header className="sticky top-0 z-40 border-b border-[var(--fw-border)] fw-glass">
         <div className="flex h-14 items-center justify-between gap-4 px-4 sm:px-6">
           {/* Brand */}
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-lg bg-[var(--fw-text)] flex items-center justify-center shadow-sm">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="text-[var(--fw-surface)]">
-                  <path d="M4 4h16v3H4zM4 9h10v3H4zM4 14h16v3H4zM4 19h7v1H4z" fill="currentColor"/>
+              <div className="relative h-8 w-8 rounded-[10px] bg-gradient-to-br from-[var(--fw-accent)] to-[var(--fw-accent-hover)] flex items-center justify-center shadow-[var(--fw-shadow-glow)]">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-white">
+                  <path d="M3 3v18h18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+                  <path d="M7 14l3-4 3 3 5-7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
               <div className="flex flex-col leading-none">
                 <span className="text-[15px] font-semibold tracking-tight">FinWise</span>
-                <span className="text-[9px] text-[var(--fw-text-3)] tracking-[0.15em] uppercase font-medium">
-                  Personal Finance Intelligence
+                <span className="text-[9px] text-[var(--fw-text-4)] tracking-[0.18em] uppercase font-medium">
+                  Finance Intelligence
                 </span>
               </div>
             </div>
-            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[var(--fw-surface-2)] border border-[var(--fw-border)] ml-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[11px] text-[var(--fw-text-2)] font-medium">Agent Online</span>
+            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--fw-positive-soft)] border border-[var(--fw-positive-border)] ml-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--fw-positive)] fw-pulse" />
+              <span className="text-[11px] text-[var(--fw-positive)] font-semibold">Live</span>
             </div>
           </div>
 
           {/* Right controls */}
           <div className="flex items-center gap-2">
             {/* Notifications */}
-            <button className="hidden sm:flex relative h-8 w-8 items-center justify-center rounded-md border border-[var(--fw-border)] bg-[var(--fw-surface)] hover:bg-[var(--fw-surface-2)] transition-colors fw-focus">
+            <button className="hidden sm:flex relative h-8 w-8 items-center justify-center rounded-lg border border-[var(--fw-border)] bg-[var(--fw-surface)] hover:bg-[var(--fw-surface-2)] hover:border-[var(--fw-border-strong)] transition-all fw-focus">
               <Bell className="h-3.5 w-3.5 text-[var(--fw-text-2)]" />
               {pendingRecCount > 0 && (
-                <span className="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full bg-[var(--fw-accent)] text-[8px] font-bold text-white flex items-center justify-center">
+                <span className="absolute -top-1 -right-1 h-4 min-w-4 px-1 rounded-full bg-[var(--fw-accent)] text-[9px] font-bold text-white flex items-center justify-center">
                   {pendingRecCount}
                 </span>
               )}
             </button>
 
-            {/* Privacy */}
+            {/* Privacy toggle */}
             <div
               role="button"
               tabIndex={0}
               onClick={() => setPrivacyMode(!privacyMode)}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPrivacyMode(!privacyMode) } }}
-              className="flex items-center gap-2 px-3 h-8 rounded-md border border-[var(--fw-border)] bg-[var(--fw-surface)] hover:bg-[var(--fw-surface-2)] transition-colors fw-focus cursor-pointer"
+              className={`flex items-center gap-2 px-3 h-8 rounded-lg border transition-all fw-focus cursor-pointer ${
+                privacyMode
+                  ? 'bg-[var(--fw-accent-soft)] border-[var(--fw-accent-border)]'
+                  : 'bg-[var(--fw-surface)] border-[var(--fw-border)] hover:border-[var(--fw-border-strong)]'
+              }`}
             >
               {privacyMode ? (
                 <Lock className="h-3.5 w-3.5 text-[var(--fw-accent)]" />
               ) : (
                 <Zap className="h-3.5 w-3.5 text-[var(--fw-text-3)]" />
               )}
-              <span className="text-[11px] font-medium text-[var(--fw-text-2)] hidden sm:inline">
+              <span className={`text-[11px] font-medium hidden sm:inline ${privacyMode ? 'text-[var(--fw-accent)]' : 'text-[var(--fw-text-2)]'}`}>
                 {privacyMode ? 'Local' : 'Cloud'}
               </span>
               <Switch checked={privacyMode} onCheckedChange={setPrivacyMode} className="scale-75 data-[state=checked]:bg-[var(--fw-accent)] pointer-events-none" />
@@ -415,11 +366,11 @@ export default function Home() {
 
             {/* Permission tier */}
             <Select value={tier} onValueChange={(v) => setTier(v as Tier)}>
-              <SelectTrigger className="w-[110px] h-8 text-[11px] font-medium border-[var(--fw-border)] bg-[var(--fw-surface)]">
+              <SelectTrigger className="w-[110px] h-8 text-[11px] font-medium border-[var(--fw-border)] bg-[var(--fw-surface)] hover:border-[var(--fw-border-strong)] rounded-lg">
                 <div className="flex items-center gap-1.5">
                   {tier === 'Viewer' && <Shield className="h-3 w-3 text-[var(--fw-text-3)]" />}
                   {tier === 'Editor' && <ShieldCheck className="h-3 w-3 text-[var(--fw-accent)]" />}
-                  {tier === 'Approver' && <ShieldAlert className="h-3 w-3 text-amber-500" />}
+                  {tier === 'Approver' && <ShieldAlert className="h-3 w-3 text-[var(--fw-warning)]" />}
                   <SelectValue />
                 </div>
               </SelectTrigger>
@@ -444,7 +395,7 @@ export default function Home() {
                 </SelectItem>
                 <SelectItem value="Approver">
                   <div className="flex items-center gap-2">
-                    <ShieldAlert className="h-3.5 w-3.5 text-amber-500" />
+                    <ShieldAlert className="h-3.5 w-3.5 text-[var(--fw-warning)]" />
                     <div className="flex flex-col">
                       <span className="text-xs font-medium">Approver</span>
                       <span className="text-[10px] text-[var(--fw-text-3)]">Execute transfers</span>
@@ -460,41 +411,37 @@ export default function Home() {
               size="sm"
               onClick={handleSeed}
               disabled={seeding}
-              className="h-8 text-[11px] font-medium border-[var(--fw-border)]"
+              className="h-8 text-[11px] font-medium border-[var(--fw-border)] hover:border-[var(--fw-border-strong)] rounded-lg"
             >
-              {seeding ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <RefreshCw className="h-3.5 w-3.5" />
-              )}
+              {seeding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
               <span className="hidden sm:inline ml-1.5">Reset</span>
             </Button>
           </div>
         </div>
       </header>
 
-      {/* ─── Body: Sidebar + Main + Chat ─────────────────────────────────── */}
+      {/* ─── Body ──────────────────────────────────────────────────────── */}
       <div className="flex-1 flex">
         {/* ─── Sidebar ─────────────────────────────────────────────────── */}
-        <aside className="hidden lg:flex w-56 flex-shrink-0 border-r border-[var(--fw-border)] bg-[var(--fw-surface)] flex-col">
+        <aside className="hidden lg:flex w-60 flex-shrink-0 border-r border-[var(--fw-border)] bg-[var(--fw-surface)] flex-col">
           <nav className="flex-1 p-3 space-y-0.5">
-            <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold px-2 mb-2">
+            <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--fw-text-4)] font-semibold px-2.5 mb-2">
               Workspace
             </div>
             {navItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => setView(item.id)}
-                className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[12px] font-medium transition-colors fw-focus ${
+                className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-medium transition-all fw-focus ${
                   view === item.id
-                    ? 'bg-[var(--fw-surface-2)] text-[var(--fw-text)] border border-[var(--fw-border)]'
+                    ? 'bg-[var(--fw-accent-soft)] text-[var(--fw-accent)] border border-[var(--fw-accent-border)]'
                     : 'text-[var(--fw-text-2)] hover:bg-[var(--fw-surface-2)] hover:text-[var(--fw-text)] border border-transparent'
                 }`}
               >
                 <item.icon className={`h-4 w-4 ${view === item.id ? 'text-[var(--fw-accent)]' : 'text-[var(--fw-text-3)]'}`} />
                 <span className="flex-1 text-left">{item.label}</span>
                 {item.badge && (
-                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-[var(--fw-warning-soft)] text-[var(--fw-warning)] border border-[var(--fw-warning-border)]">
                     {item.badge}
                   </span>
                 )}
@@ -502,37 +449,42 @@ export default function Home() {
             ))}
           </nav>
 
-          {/* Sidebar footer: System status mini */}
+          {/* AI Agent card */}
+          <div className="p-3">
+            <div className="rounded-xl border border-[var(--fw-accent-border)] bg-gradient-to-br from-[var(--fw-accent-soft)] to-[var(--fw-surface)] p-3.5">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-6 w-6 rounded-md bg-gradient-to-br from-[var(--fw-accent)] to-[var(--fw-accent-hover)] flex items-center justify-center">
+                  <Bot className="h-3.5 w-3.5 text-white" />
+                </div>
+                <span className="text-[12px] font-semibold">FinWise Agent</span>
+              </div>
+              <div className="text-[10px] text-[var(--fw-text-3)] mb-2.5 leading-relaxed">
+                Supervisor-Worker pattern with 4 specialized sub-agents and 7 tools.
+              </div>
+              <Button
+                onClick={() => setChatOpen(true)}
+                size="sm"
+                className="w-full h-7 text-[11px] font-medium bg-[var(--fw-text)] hover:bg-[var(--fw-text-2)] text-[var(--fw-surface)] rounded-md"
+              >
+                <Sparkles className="h-3 w-3 mr-1" /> Open chat
+              </Button>
+            </div>
+          </div>
+
+          {/* Sidebar footer: System status */}
           <div className="p-3 border-t border-[var(--fw-border)]">
             <div className="flex items-center gap-2 mb-2">
               <Cpu className="h-3 w-3 text-[var(--fw-text-3)]" />
-              <span className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold">
+              <span className="text-[10px] uppercase tracking-[0.12em] text-[var(--fw-text-4)] font-semibold">
                 System
               </span>
             </div>
             <div className="space-y-1 text-[10px]">
-              <div className="flex justify-between">
-                <span className="text-[var(--fw-text-3)]">Architecture</span>
-                <span className="font-mono text-[var(--fw-text-2)]">Supervisor-Worker</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[var(--fw-text-3)]">Workers</span>
-                <span className="font-mono text-[var(--fw-text-2)]">4 active</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[var(--fw-text-3)]">LLM</span>
-                <span className="font-mono text-[var(--fw-text-2)]">Z.ai Chat</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[var(--fw-text-3)]">PII mode</span>
-                <span className={`font-mono ${privacyMode ? 'text-[var(--fw-accent)]' : 'text-[var(--fw-text-2)]'}`}>
-                  {privacyMode ? 'Scrubbed' : 'Standard'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[var(--fw-text-3)]">Latency</span>
-                <span className="font-mono text-[var(--fw-text-2)]">~1.5s</span>
-              </div>
+              <SystemRow icon={Database} label="DB" value="SQLite · Prisma" />
+              <SystemRow icon={Cpu} label="Workers" value="4 active" />
+              <SystemRow icon={Zap} label="LLM" value="Z.ai Chat" />
+              <SystemRow icon={Lock} label="PII" value={privacyMode ? 'Scrubbed' : 'Standard'} highlight={privacyMode} />
+              <SystemRow icon={Activity} label="Latency" value="~1.5s" />
             </div>
           </div>
         </aside>
@@ -541,74 +493,47 @@ export default function Home() {
         <main className="flex-1 min-w-0 overflow-x-hidden">
           {view === 'overview' && (
             <OverviewView
-              txns={txns}
-              byCategory={byCategory}
-              byMonth={byMonth}
-              totalSpend={totalSpend}
-              totalIncome={totalIncome}
-              netSavings={netSavings}
-              savingsRate={savingsRate}
-              budgets={budgets}
-              overBudgetCount={overBudgetCount}
-              goals={goals}
-              recs={recs}
-              totalPendingRecs={totalPendingRecs}
-              tier={tier}
-              onUpdateRec={updateRec}
-              onRefresh={loadDashboard}
-              fileInputRef={fileInputRef}
-              receiptInputRef={receiptInputRef}
-              onCsvUpload={handleCsvUpload}
-              onReceiptUpload={handleReceipt}
+              txns={txns} byCategory={byCategory} byMonth={byMonth}
+              totalSpend={totalSpend} totalIncome={totalIncome}
+              netSavings={netSavings} savingsRate={savingsRate}
+              budgets={budgets} overBudgetCount={overBudgetCount}
+              goals={goals} recs={recs} totalPendingRecs={totalPendingRecs}
+              tier={tier} onUpdateRec={updateRec} onRefresh={loadDashboard}
+              fileInputRef={fileInputRef} receiptInputRef={receiptInputRef}
             />
           )}
-          {view === 'transactions' && (
-            <TransactionsView txns={txns} byCategory={byCategory} />
-          )}
-          {view === 'budgets' && (
-            <BudgetsView budgets={budgets} tier={tier} onUpdate={loadDashboard} />
-          )}
-          {view === 'goals' && (
-            <GoalsView goals={goals} onRefresh={loadDashboard} />
-          )}
+          {view === 'transactions' && <TransactionsView txns={txns} byCategory={byCategory} />}
+          {view === 'budgets' && <BudgetsView budgets={budgets} tier={tier} onUpdate={loadDashboard} />}
+          {view === 'goals' && <GoalsView goals={goals} />}
           {view === 'insights' && (
             <InsightsView
-              anomalies={anomalies}
-              momDeltas={momDeltas}
-              topMerchants={topMerchants}
-              subscriptions={subscriptions}
-              recs={recs}
-              tier={tier}
-              onUpdateRec={updateRec}
+              anomalies={anomalies} momDeltas={momDeltas}
+              topMerchants={topMerchants} subscriptions={subscriptions}
+              recs={recs} tier={tier} onUpdateRec={updateRec}
             />
           )}
         </main>
 
-        {/* ─── Chat Slide-over Panel ──────────────────────────────────── */}
+        {/* ─── Chat Slide-over ────────────────────────────────────────── */}
         {chatOpen && (
-          <aside className="hidden xl:flex w-[380px] flex-shrink-0 border-l border-[var(--fw-border)] bg-[var(--fw-surface)] flex-col">
+          <aside className="hidden xl:flex w-[400px] flex-shrink-0 border-l border-[var(--fw-border)] bg-[var(--fw-surface)] flex-col">
             <ChatPanel
-              messages={messages}
-              input={input}
-              setInput={setInput}
-              chatLoading={chatLoading}
-              sendChat={sendChat}
-              scrollRef={scrollRef}
-              quickPrompts={quickPrompts}
-              privacyMode={privacyMode}
-              onClose={() => setChatOpen(false)}
+              messages={messages} input={input} setInput={setInput}
+              chatLoading={chatLoading} sendChat={sendChat}
+              scrollRef={scrollRef} quickPrompts={quickPrompts}
+              privacyMode={privacyMode} onClose={() => setChatOpen(false)}
             />
           </aside>
         )}
       </div>
 
-      {/* Floating chat toggle (mobile + when closed) */}
+      {/* Floating chat toggle */}
       {!chatOpen && (
         <button
           onClick={() => setChatOpen(true)}
-          className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full bg-[var(--fw-text)] text-[var(--fw-surface)] shadow-[var(--fw-shadow-lg)] flex items-center justify-center hover:scale-105 transition-transform"
+          className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full bg-gradient-to-br from-[var(--fw-accent)] to-[var(--fw-accent-hover)] shadow-[var(--fw-shadow-lg)] hover:shadow-[var(--fw-shadow-glow)] flex items-center justify-center hover:scale-105 transition-all"
         >
-          <Bot className="h-5 w-5" />
+          <Bot className="h-5 w-5 text-white" />
         </button>
       )}
 
@@ -617,21 +542,15 @@ export default function Home() {
         <div className="xl:hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={() => setChatOpen(false)}>
           <div className="absolute right-0 top-0 bottom-0 w-full max-w-md bg-[var(--fw-surface)] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <ChatPanel
-              messages={messages}
-              input={input}
-              setInput={setInput}
-              chatLoading={chatLoading}
-              sendChat={sendChat}
-              scrollRef={scrollRef}
-              quickPrompts={quickPrompts}
-              privacyMode={privacyMode}
-              onClose={() => setChatOpen(false)}
+              messages={messages} input={input} setInput={setInput}
+              chatLoading={chatLoading} sendChat={sendChat}
+              scrollRef={scrollRef} quickPrompts={quickPrompts}
+              privacyMode={privacyMode} onClose={() => setChatOpen(false)}
             />
           </div>
         </div>
       )}
 
-      {/* Hidden file inputs */}
       <input ref={fileInputRef} type="file" accept=".csv" onChange={handleCsvUpload} className="hidden" />
       <input ref={receiptInputRef} type="file" accept="image/*" onChange={handleReceipt} className="hidden" />
 
@@ -675,71 +594,70 @@ function OverviewView(props: {
   onRefresh: () => void
   fileInputRef: React.RefObject<HTMLInputElement>
   receiptInputRef: React.RefObject<HTMLInputElement>
-  onCsvUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
-  onReceiptUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
 }) {
   const { txns, byCategory, byMonth, totalSpend, totalIncome, netSavings, savingsRate,
           budgets, overBudgetCount, goals, recs, totalPendingRecs, tier, onUpdateRec,
-          fileInputRef, receiptInputRef, onCsvUpload, onReceiptUpload } = props
+          fileInputRef, receiptInputRef } = props
 
   return (
-    <div className="p-5 sm:p-6 lg:p-8 space-y-6 max-w-[1200px]">
+    <div className="p-6 sm:p-8 lg:p-10 space-y-8 max-w-[1200px]">
       {/* Page header */}
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
-          <p className="text-sm text-[var(--fw-text-3)] mt-1">
-            Last 6 months · {txns.length} transactions · {goals.length} active goals
+          <h1 className="text-[28px] font-semibold tracking-tight">Overview</h1>
+          <p className="text-[13px] text-[var(--fw-text-3)] mt-1">
+            Last 6 months · <span className="text-[var(--fw-text-2)] font-medium">{txns.length}</span> transactions · <span className="text-[var(--fw-text-2)] font-medium">{goals.length}</span> active goals
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => receiptInputRef.current?.click()}>
+          <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg border-[var(--fw-border)] hover:border-[var(--fw-border-strong)]" onClick={() => receiptInputRef.current?.click()}>
             <Receipt className="h-3.5 w-3.5 mr-1.5" /> Receipt OCR
           </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => fileInputRef.current?.click()}>
+          <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg border-[var(--fw-border)] hover:border-[var(--fw-border-strong)]" onClick={() => fileInputRef.current?.click()}>
             <Upload className="h-3.5 w-3.5 mr-1.5" /> Import CSV
           </Button>
         </div>
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <KpiCard
           label="Income"
           value={fmt(totalIncome, { compact: true })}
-          delta="+12.4% vs avg"
+          delta="+12.4%"
           deltaDirection="up"
-          icon={<ArrowDownRight className="h-3 w-3" />}
+          icon={<ArrowDownRight className="h-3.5 w-3.5" />}
+          accent="positive"
         />
         <KpiCard
           label="Spend"
           value={fmt(totalSpend, { compact: true })}
-          delta="+4.2% vs avg"
+          delta="+4.2%"
           deltaDirection="up"
           negative
-          icon={<ArrowUpRight className="h-3 w-3" />}
+          icon={<ArrowUpRight className="h-3.5 w-3.5" />}
+          accent="negative"
         />
         <KpiCard
           label="Net Savings"
           value={fmt(netSavings, { sign: true, compact: true })}
-          delta={`${savingsRate}% savings rate`}
+          delta={`${savingsRate}% rate`}
           deltaDirection={netSavings >= 0 ? 'up' : 'down'}
           highlight
-          icon={<TrendingUp className="h-3 w-3" />}
+          icon={<TrendingUp className="h-3.5 w-3.5" />}
         />
       </div>
 
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Spending by category */}
-        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <BarChart3 className="h-4 w-4 text-[var(--fw-text-2)]" />
-              <h2 className="text-sm font-semibold">Spending by Category</h2>
+              <h2 className="text-[14px] font-semibold">Spending by Category</h2>
             </div>
-            <span className="text-[10px] text-[var(--fw-text-3)]">
-              Total: <span className="font-mono tnum text-[var(--fw-text-2)] font-semibold">
+            <span className="text-[11px] text-[var(--fw-text-3)]">
+              Total: <span className="font-mono tnum text-[var(--fw-text)] font-semibold">
                 {fmt(byCategory.reduce((s, c) => s + c.cents, 0), { compact: true })}
               </span>
             </span>
@@ -756,8 +674,9 @@ function OverviewView(props: {
                   <RTooltip
                     formatter={(value: any) => typeof value === 'number' && !isNaN(value) ? fmt(value) : ''}
                     contentStyle={{
-                      fontSize: '11px', borderRadius: '6px', padding: '6px 10px',
-                      border: '1px solid var(--fw-border)', background: 'var(--fw-surface)', color: 'var(--fw-text)',
+                      fontSize: '11px', borderRadius: '8px', padding: '8px 12px',
+                      border: '1px solid var(--fw-border)', background: 'var(--fw-surface)',
+                      color: 'var(--fw-text)', boxShadow: 'var(--fw-shadow-md)',
                     }}
                   />
                 </Treemap>
@@ -766,12 +685,11 @@ function OverviewView(props: {
           </div>
         </Card>
 
-        {/* Monthly trend */}
-        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Activity className="h-4 w-4 text-[var(--fw-text-2)]" />
-              <h2 className="text-sm font-semibold">Monthly Trend</h2>
+              <h2 className="text-[14px] font-semibold">Monthly Trend</h2>
             </div>
             <div className="flex gap-3 text-[10px]">
               <span className="flex items-center gap-1">
@@ -790,12 +708,12 @@ function OverviewView(props: {
                 <AreaChart data={byMonth.map(m => ({ ...m, label: fmtMonth(m.month) }))}>
                   <defs>
                     <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#15803d" stopOpacity={0.2} />
-                      <stop offset="100%" stopColor="#15803d" stopOpacity={0} />
+                      <stop offset="0%" stopColor="var(--fw-positive)" stopOpacity={0.25} />
+                      <stop offset="100%" stopColor="var(--fw-positive)" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#b91c1c" stopOpacity={0.15} />
-                      <stop offset="100%" stopColor="#b91c1c" stopOpacity={0} />
+                      <stop offset="0%" stopColor="var(--fw-negative)" stopOpacity={0.2} />
+                      <stop offset="100%" stopColor="var(--fw-negative)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--fw-border)" strokeOpacity={0.6} vertical={false} />
@@ -803,10 +721,10 @@ function OverviewView(props: {
                   <YAxis tick={{ fontSize: 10, fill: 'var(--fw-text-3)' }} tickLine={false} axisLine={false} tickFormatter={(v) => fmt(v, { compact: true })} />
                   <Tooltip
                     formatter={(value: any) => typeof value === 'number' && !isNaN(value) ? fmt(value) : ''}
-                    contentStyle={{ fontSize: '11px', borderRadius: '6px', padding: '6px 10px', border: '1px solid var(--fw-border)', background: 'var(--fw-surface)' }}
+                    contentStyle={{ fontSize: '11px', borderRadius: '8px', padding: '8px 12px', border: '1px solid var(--fw-border)', background: 'var(--fw-surface)', boxShadow: 'var(--fw-shadow-md)' }}
                   />
-                  <Area type="monotone" dataKey="incomeCents" stroke="#15803d" strokeWidth={1.5} fill="url(#incomeGrad)" name="Income" />
-                  <Area type="monotone" dataKey="spendCents" stroke="#b91c1c" strokeWidth={1.5} fill="url(#spendGrad)" name="Spend" />
+                  <Area type="monotone" dataKey="incomeCents" stroke="var(--fw-positive)" strokeWidth={2} fill="url(#incomeGrad)" name="Income" />
+                  <Area type="monotone" dataKey="spendCents" stroke="var(--fw-negative)" strokeWidth={2} fill="url(#spendGrad)" name="Spend" />
                 </AreaChart>
               </ResponsiveContainer>
             ) : <Loading />}
@@ -816,18 +734,18 @@ function OverviewView(props: {
 
       {/* Budget status + top recommendations */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <Card className="lg:col-span-2 p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+        <Card className="lg:col-span-2 p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Wallet className="h-4 w-4 text-[var(--fw-text-2)]" />
-              <h2 className="text-sm font-semibold">Budget Status</h2>
+              <h2 className="text-[14px] font-semibold">Budget Status</h2>
             </div>
             <div className="flex items-center gap-2">
               {overBudgetCount > 0 && (
-                <Badge variant="outline" className="text-[10px] font-medium border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400">
-                  <AlertTriangle className="h-2.5 w-2.5 mr-1" />
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-md bg-[var(--fw-negative-soft)] text-[var(--fw-negative)] border border-[var(--fw-negative-border)]">
+                  <AlertTriangle className="h-2.5 w-2.5" />
                   {overBudgetCount} over
-                </Badge>
+                </span>
               )}
               <span className="text-[10px] text-[var(--fw-text-3)] font-medium">
                 {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
@@ -835,22 +753,20 @@ function OverviewView(props: {
             </div>
           </div>
           <div className="space-y-3">
-            {budgets.slice(0, 6).map((b) => (
-              <BudgetRow key={b.id} b={b} tier={tier} onUpdate={() => props.onRefresh()} />
-            ))}
+            {budgets.slice(0, 6).map((b) => <BudgetRow key={b.id} b={b} tier={tier} onUpdate={() => props.onRefresh()} />)}
             {budgets.length === 0 && <Loading />}
           </div>
         </Card>
 
-        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-amber-500" />
-              <h2 className="text-sm font-semibold">Top Recommendations</h2>
+              <Sparkles className="h-4 w-4 text-[var(--fw-warning)]" />
+              <h2 className="text-[14px] font-semibold">Recommendations</h2>
             </div>
-            <Badge variant="outline" className="text-[10px] font-medium border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-400">
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-md bg-[var(--fw-positive-soft)] text-[var(--fw-positive)] border border-[var(--fw-positive-border)]">
               +{fmt(totalPendingRecs, { compact: true })}/yr
-            </Badge>
+            </span>
           </div>
           <div className="space-y-2">
             {recs.filter(r => r.status === 'pending').slice(0, 3).map((r) => (
@@ -863,10 +779,10 @@ function OverviewView(props: {
 
       {/* Goals mini-strip + Recent transactions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
           <div className="flex items-center gap-2 mb-4">
             <Target className="h-4 w-4 text-[var(--fw-text-2)]" />
-            <h2 className="text-sm font-semibold">Savings Goals</h2>
+            <h2 className="text-[14px] font-semibold">Savings Goals</h2>
           </div>
           <div className="space-y-4">
             {goals.slice(0, 3).map((g) => <GoalCard key={g.id} g={g} />)}
@@ -874,11 +790,11 @@ function OverviewView(props: {
           </div>
         </Card>
 
-        <Card className="lg:col-span-2 p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+        <Card className="lg:col-span-2 p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Receipt className="h-4 w-4 text-[var(--fw-text-2)]" />
-              <h2 className="text-sm font-semibold">Recent Transactions</h2>
+              <h2 className="text-[14px] font-semibold">Recent Transactions</h2>
             </div>
             <span className="text-[10px] text-[var(--fw-text-3)]">{txns.length} total</span>
           </div>
@@ -912,28 +828,28 @@ function TransactionsView({ txns, byCategory }: {
   const totalIncome = filtered.filter(t => t.direction === 'credit').reduce((s, t) => s + t.amountCents, 0)
 
   return (
-    <div className="p-5 sm:p-6 lg:p-8 space-y-6 max-w-[1200px]">
+    <div className="p-6 sm:p-8 lg:p-10 space-y-6 max-w-[1200px]">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Transactions</h1>
-        <p className="text-sm text-[var(--fw-text-3)] mt-1">
-          {filtered.length} of {txns.length} transactions · {fmt(totalSpend)} spend · {fmt(totalIncome)} income
+        <h1 className="text-[28px] font-semibold tracking-tight">Transactions</h1>
+        <p className="text-[13px] text-[var(--fw-text-3)] mt-1">
+          <span className="text-[var(--fw-text-2)] font-medium">{filtered.length}</span> of {txns.length} · <span className="text-[var(--fw-text-2)] font-medium">{fmt(totalSpend)}</span> spend · <span className="text-[var(--fw-text-2)] font-medium">{fmt(totalIncome)}</span> income
         </p>
       </div>
 
       {/* Filter bar */}
-      <Card className="p-3 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+      <Card className="p-3 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--fw-text-3)]" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--fw-text-3)]" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search merchants..."
-              className="pl-8 h-9 text-[13px] border-[var(--fw-border)]"
+              className="pl-9 h-9 text-[13px] border-[var(--fw-border)] rounded-lg bg-[var(--fw-surface-2)]"
             />
           </div>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-[160px] h-9 text-[12px] border-[var(--fw-border)]">
+            <SelectTrigger className="w-[160px] h-9 text-[12px] border-[var(--fw-border)] rounded-lg bg-[var(--fw-surface-2)]">
               <div className="flex items-center gap-1.5">
                 <Filter className="h-3 w-3 text-[var(--fw-text-3)]" />
                 <SelectValue />
@@ -941,18 +857,11 @@ function TransactionsView({ txns, byCategory }: {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All categories</SelectItem>
-              {byCategory.map(c => (
-                <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>
-              ))}
+              {byCategory.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}
             </SelectContent>
           </Select>
           {(search || categoryFilter !== 'all') && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-9 text-xs"
-              onClick={() => { setSearch(''); setCategoryFilter('all') }}
-            >
+            <Button variant="ghost" size="sm" className="h-9 text-xs" onClick={() => { setSearch(''); setCategoryFilter('all') }}>
               <X className="h-3.5 w-3.5 mr-1" /> Clear
             </Button>
           )}
@@ -960,16 +869,16 @@ function TransactionsView({ txns, byCategory }: {
       </Card>
 
       {/* Transactions table */}
-      <Card className="border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] overflow-hidden">
+      <Card className="border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-[12px]">
             <thead>
               <tr className="border-b border-[var(--fw-border)] bg-[var(--fw-surface-2)]/50">
-                <th className="text-left font-semibold text-[var(--fw-text-2)] px-4 py-2.5">Date</th>
-                <th className="text-left font-semibold text-[var(--fw-text-2)] px-4 py-2.5">Merchant</th>
-                <th className="text-left font-semibold text-[var(--fw-text-2)] px-4 py-2.5">Category</th>
-                <th className="text-left font-semibold text-[var(--fw-text-2)] px-4 py-2.5">Source</th>
-                <th className="text-right font-semibold text-[var(--fw-text-2)] px-4 py-2.5">Amount</th>
+                <th className="text-left font-semibold text-[var(--fw-text-2)] px-4 py-2.5 text-[11px] uppercase tracking-wider">Date</th>
+                <th className="text-left font-semibold text-[var(--fw-text-2)] px-4 py-2.5 text-[11px] uppercase tracking-wider">Merchant</th>
+                <th className="text-left font-semibold text-[var(--fw-text-2)] px-4 py-2.5 text-[11px] uppercase tracking-wider">Category</th>
+                <th className="text-left font-semibold text-[var(--fw-text-2)] px-4 py-2.5 text-[11px] uppercase tracking-wider">Source</th>
+                <th className="text-right font-semibold text-[var(--fw-text-2)] px-4 py-2.5 text-[11px] uppercase tracking-wider">Amount</th>
               </tr>
             </thead>
             <tbody>
@@ -985,7 +894,7 @@ function TransactionsView({ txns, byCategory }: {
                       </div>
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="font-medium text-[var(--fw-text)] truncate">{t.merchantRaw}</span>
-                        {t.anomaly && <AlertTriangle className="h-3 w-3 text-amber-500 flex-shrink-0" />}
+                        {t.anomaly && <AlertTriangle className="h-3 w-3 text-[var(--fw-warning)] flex-shrink-0" />}
                         {t.recurring && <span className="text-[8px] font-medium uppercase tracking-wider px-1 py-0.5 rounded bg-[var(--fw-surface-2)] text-[var(--fw-text-3)] border border-[var(--fw-border)]">Recurring</span>}
                       </div>
                     </div>
@@ -1025,51 +934,47 @@ function TransactionsView({ txns, byCategory }: {
 }
 
 // ═══ View: Budgets ════════════════════════════════════════════════════
-function BudgetsView({ budgets, tier, onUpdate }: {
-  budgets: BudgetItem[]
-  tier: Tier
-  onUpdate: () => void
-}) {
+function BudgetsView({ budgets, tier, onUpdate }: { budgets: BudgetItem[]; tier: Tier; onUpdate: () => void }) {
   const totalBudget = budgets.reduce((s, b) => s + b.budgetCents, 0)
   const totalSpent = budgets.reduce((s, b) => s + b.spentCents, 0)
   const totalRemaining = totalBudget - totalSpent
   const pctUsed = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0
 
   return (
-    <div className="p-5 sm:p-6 lg:p-8 space-y-6 max-w-[1200px]">
+    <div className="p-6 sm:p-8 lg:p-10 space-y-6 max-w-[1200px]">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Budgets</h1>
-        <p className="text-sm text-[var(--fw-text-3)] mt-1">
-          {budgets.length} envelopes · {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+        <h1 className="text-[28px] font-semibold tracking-tight">Budgets</h1>
+        <p className="text-[13px] text-[var(--fw-text-3)] mt-1">
+          <span className="text-[var(--fw-text-2)] font-medium">{budgets.length}</span> envelopes · {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
         </p>
       </div>
 
       {/* Summary card */}
-      <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
-        <div className="grid grid-cols-3 gap-4">
+      <Card className="p-6 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
+        <div className="grid grid-cols-3 gap-6">
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">Total Allocated</div>
-            <div className="text-2xl font-semibold tnum">{fmt(totalBudget, { compact: true })}</div>
+            <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--fw-text-3)] font-semibold mb-1.5">Allocated</div>
+            <div className="text-[28px] font-semibold tnum tracking-tight">{fmt(totalBudget, { compact: true })}</div>
           </div>
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">Total Spent</div>
-            <div className="text-2xl font-semibold tnum text-[var(--fw-negative)]">{fmt(totalSpent, { compact: true })}</div>
+            <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--fw-text-3)] font-semibold mb-1.5">Spent</div>
+            <div className="text-[28px] font-semibold tnum tracking-tight text-[var(--fw-negative)]">{fmt(totalSpent, { compact: true })}</div>
           </div>
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">Remaining</div>
-            <div className={`text-2xl font-semibold tnum ${totalRemaining >= 0 ? 'text-[var(--fw-positive)]' : 'text-[var(--fw-negative)]'}`}>
+            <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--fw-text-3)] font-semibold mb-1.5">Remaining</div>
+            <div className={`text-[28px] font-semibold tnum tracking-tight ${totalRemaining >= 0 ? 'text-[var(--fw-positive)]' : 'text-[var(--fw-negative)]'}`}>
               {fmt(totalRemaining, { sign: true, compact: true })}
             </div>
           </div>
         </div>
-        <div className="mt-4">
-          <div className="flex justify-between text-[11px] mb-1.5">
+        <div className="mt-5">
+          <div className="flex justify-between text-[11px] mb-2">
             <span className="text-[var(--fw-text-2)] font-medium">{pctUsed}% of total budget used</span>
             <span className="text-[var(--fw-text-3)] tnum">{fmt(totalSpent)} / {fmt(totalBudget)}</span>
           </div>
           <div className="h-2 bg-[var(--fw-surface-2)] rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all ${pctUsed > 100 ? 'bg-[var(--fw-negative)]' : 'bg-[var(--fw-accent)]'}`}
+              className={`h-full rounded-full transition-all ${pctUsed > 100 ? 'bg-[var(--fw-negative)]' : 'bg-gradient-to-r from-[var(--fw-accent)] to-[var(--fw-accent-hover)]'}`}
               style={{ width: `${Math.min(100, pctUsed)}%` }}
             />
           </div>
@@ -1084,8 +989,7 @@ function BudgetsView({ budgets, tier, onUpdate }: {
 
       {tier === 'Viewer' && (
         <div className="text-[11px] text-[var(--fw-text-3)] flex items-center gap-1.5">
-          <Lock className="h-3 w-3" />
-          Viewer tier — budget modifications disabled
+          <Lock className="h-3 w-3" /> Viewer tier — budget modifications disabled
         </div>
       )}
     </div>
@@ -1109,30 +1013,28 @@ function BudgetDetailCard({ b, tier, onUpdate }: { b: BudgetItem; tier: Tier; on
       })
       toast.success(`Updated ${b.category} budget to $${newVal}`)
       onUpdate()
-    } catch (err: any) {
-      toast.error(err.message)
-    }
+    } catch (err: any) { toast.error(err.message) }
     setEditing(false)
   }
 
   return (
-    <Card className={`p-4 border shadow-[var(--fw-shadow-sm)] ${
-      overBudget ? 'border-red-200 bg-red-50/30 dark:border-red-900/40 dark:bg-red-950/10' : 'border-[var(--fw-border)] bg-[var(--fw-surface)]'
+    <Card className={`p-4 border shadow-[var(--fw-shadow-sm)] rounded-xl fw-card ${
+      overBudget ? 'border-[var(--fw-negative-border)] bg-[var(--fw-negative-soft)]' : 'border-[var(--fw-border)] bg-[var(--fw-surface)]'
     }`}>
       <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-md flex items-center justify-center" style={{ backgroundColor: b.color }}>
+        <div className="flex items-center gap-2.5">
+          <div className="h-9 w-9 rounded-lg flex items-center justify-center" style={{ backgroundColor: b.color }}>
             <Wallet className="h-4 w-4 text-white" />
           </div>
           <div>
-            <div className="text-sm font-semibold">{b.category}</div>
+            <div className="text-[13px] font-semibold">{b.category}</div>
             <div className="text-[10px] text-[var(--fw-text-3)] tnum">
               {b.percentUsed}% used · {b.percentUsed > 100 ? `${fmt(b.spentCents - b.budgetCents)} over` : `${fmt(b.budgetCents - b.spentCents)} left`}
             </div>
           </div>
         </div>
         {tier !== 'Viewer' && (
-          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-[var(--fw-text-3)]" onClick={() => setEditing(!editing)}>
+          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-[var(--fw-text-3)] hover:bg-[var(--fw-surface-2)]" onClick={() => setEditing(!editing)}>
             <ChevronRight className="h-3 w-3" />
           </Button>
         )}
@@ -1140,11 +1042,11 @@ function BudgetDetailCard({ b, tier, onUpdate }: { b: BudgetItem; tier: Tier; on
       <div className="space-y-2">
         <div className="flex items-baseline justify-between">
           <span className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold">Spent</span>
-          <span className="text-lg font-semibold tnum">{fmt(b.spentCents)}</span>
+          <span className="text-xl font-semibold tnum">{fmt(b.spentCents)}</span>
         </div>
         <div className="h-1.5 bg-[var(--fw-surface-2)] rounded-full overflow-hidden">
           <div
-            className={`h-full rounded-full transition-all ${overBudget ? 'bg-[var(--fw-negative)]' : nearLimit ? 'bg-amber-500' : 'bg-[var(--fw-positive)]'}`}
+            className={`h-full rounded-full transition-all ${overBudget ? 'bg-[var(--fw-negative)]' : nearLimit ? 'bg-[var(--fw-warning)]' : 'bg-[var(--fw-positive)]'}`}
             style={{ width: `${Math.min(100, b.percentUsed)}%` }}
           />
         </div>
@@ -1155,7 +1057,7 @@ function BudgetDetailCard({ b, tier, onUpdate }: { b: BudgetItem; tier: Tier; on
       </div>
       {editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setEditing(false)}>
-          <div className="bg-[var(--fw-surface)] rounded-lg p-5 w-80 border border-[var(--fw-border)] shadow-[var(--fw-shadow-lg)]" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-[var(--fw-surface)] rounded-xl p-5 w-80 border border-[var(--fw-border)] shadow-[var(--fw-shadow-lg)]" onClick={(e) => e.stopPropagation()}>
             <div className="text-sm font-semibold mb-1">Edit {b.category} budget</div>
             <div className="text-[11px] text-[var(--fw-text-3)] mb-3">Set monthly envelope allocation</div>
             <div className="relative">
@@ -1163,8 +1065,8 @@ function BudgetDetailCard({ b, tier, onUpdate }: { b: BudgetItem; tier: Tier; on
               <Input value={value} onChange={(e) => setValue(e.target.value)} type="number" className="pl-7" autoFocus />
             </div>
             <div className="flex gap-2 mt-4">
-              <Button variant="outline" size="sm" className="flex-1" onClick={() => setEditing(false)}>Cancel</Button>
-              <Button size="sm" className="flex-1 bg-[var(--fw-text)] hover:bg-[var(--fw-text-2)] text-[var(--fw-surface)]" onClick={save}>Save</Button>
+              <Button variant="outline" size="sm" className="flex-1 rounded-lg" onClick={() => setEditing(false)}>Cancel</Button>
+              <Button size="sm" className="flex-1 bg-[var(--fw-text)] hover:bg-[var(--fw-text-2)] text-[var(--fw-surface)] rounded-lg" onClick={save}>Save</Button>
             </div>
           </div>
         </div>
@@ -1174,10 +1076,7 @@ function BudgetDetailCard({ b, tier, onUpdate }: { b: BudgetItem; tier: Tier; on
 }
 
 // ═══ View: Goals ══════════════════════════════════════════════════════
-function GoalsView({ goals, onRefresh }: {
-  goals: GoalItem[]
-  onRefresh: () => void
-}) {
+function GoalsView({ goals }: { goals: GoalItem[] }) {
   const [simulating, setSimulating] = useState<string | null>(null)
   const [simResult, setSimResult] = useState<any>(null)
 
@@ -1195,44 +1094,35 @@ function GoalsView({ goals, onRefresh }: {
         toast.success('Monte Carlo simulation complete', {
           description: `Median: ${d.medianMonths} months · 80% CI: ${d.p10Months}-${d.p90Months}`,
         })
-      } else {
-        toast.error(d.error || 'Simulation failed')
-      }
-    } catch (err: any) {
-      toast.error(err.message)
-    } finally {
-      setSimulating(null)
-    }
+      } else { toast.error(d.error || 'Simulation failed') }
+    } catch (err: any) { toast.error(err.message) }
+    finally { setSimulating(null) }
   }
 
   return (
-    <div className="p-5 sm:p-6 lg:p-8 space-y-6 max-w-[1200px]">
+    <div className="p-6 sm:p-8 lg:p-10 space-y-6 max-w-[1200px]">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Savings Goals</h1>
-        <p className="text-sm text-[var(--fw-text-3)] mt-1">
-          {goals.length} active goals · Click "Run simulation" to project completion dates with Monte Carlo
+        <h1 className="text-[28px] font-semibold tracking-tight">Savings Goals</h1>
+        <p className="text-[13px] text-[var(--fw-text-3)] mt-1">
+          <span className="text-[var(--fw-text-2)] font-medium">{goals.length}</span> active goals · Click "Run simulation" to project completion dates with Monte Carlo
         </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {goals.map((g) => (
-          <Card key={g.id} className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+          <Card key={g.id} className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
             <div className="flex items-start gap-4 mb-4">
               <div className="relative h-16 w-16 flex-shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <RadialBarChart
-                    innerRadius="72%"
-                    outerRadius="100%"
-                    data={[{ value: g.percentComplete, fill: g.percentComplete >= 80 ? '#15803d' : g.percentComplete >= 50 ? '#b45309' : '#0f766e' }]}
-                    startAngle={90}
-                    endAngle={-270}
+                    innerRadius="72%" outerRadius="100%"
+                    data={[{ value: g.percentComplete, fill: g.percentComplete >= 80 ? 'var(--fw-positive)' : g.percentComplete >= 50 ? 'var(--fw-warning)' : 'var(--fw-accent)' }]}
+                    startAngle={90} endAngle={-270}
                   >
                     <RadialBar background={{ fill: 'var(--fw-surface-2)' }} dataKey="value" cornerRadius={10} />
                   </RadialBarChart>
                 </ResponsiveContainer>
-                <div className="absolute inset-0 flex items-center justify-center text-[11px] font-bold tnum">
-                  {g.percentComplete}%
-                </div>
+                <div className="absolute inset-0 flex items-center justify-center text-[11px] font-bold tnum">{g.percentComplete}%</div>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-base font-semibold">{g.name}</div>
@@ -1243,16 +1133,14 @@ function GoalsView({ goals, onRefresh }: {
                   {fmt(g.remainingCents)} remaining · {fmt(g.monthlyContributionCents)}/mo contribution
                 </div>
                 {g.monthsToTarget !== null && (
-                  <div className="text-[11px] text-[var(--fw-text-3)] mt-0.5">
-                    Target: {g.monthsToTarget} months out
-                  </div>
+                  <div className="text-[11px] text-[var(--fw-text-3)] mt-0.5">Target: {g.monthsToTarget} months out</div>
                 )}
               </div>
             </div>
             <Button
               variant="outline"
               size="sm"
-              className="w-full h-8 text-[11px] font-medium border-[var(--fw-border)]"
+              className="w-full h-8 text-[11px] font-medium border-[var(--fw-border)] hover:border-[var(--fw-accent-border)] hover:bg-[var(--fw-accent-soft)] hover:text-[var(--fw-accent)] rounded-lg"
               onClick={() => runSim(g.id)}
               disabled={simulating === g.id}
             >
@@ -1267,47 +1155,48 @@ function GoalsView({ goals, onRefresh }: {
         {goals.length === 0 && <Loading />}
       </div>
 
-      {/* Simulation results */}
       {simResult && (
-        <Card className="p-5 border-[var(--fw-accent)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-md)]">
+        <Card className="p-5 border-[var(--fw-accent-border)] bg-gradient-to-br from-[var(--fw-accent-soft)] to-[var(--fw-surface)] shadow-[var(--fw-shadow-md)] rounded-xl">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <Activity className="h-4 w-4 text-[var(--fw-accent)]" />
-              <h2 className="text-sm font-semibold">Simulation Result · {simResult.goalName}</h2>
+              <div className="h-7 w-7 rounded-md bg-gradient-to-br from-[var(--fw-accent)] to-[var(--fw-accent-hover)] flex items-center justify-center">
+                <Activity className="h-4 w-4 text-white" />
+              </div>
+              <h2 className="text-[14px] font-semibold">Simulation Result · {simResult.goalName}</h2>
             </div>
             <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setSimResult(null)}>
               <X className="h-3.5 w-3.5" />
             </Button>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">Median</div>
-              <div className="text-xl font-semibold tnum text-[var(--fw-accent)]">{simResult.medianMonths} mo</div>
+              <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--fw-text-3)] font-semibold mb-1">Median</div>
+              <div className="text-2xl font-semibold tnum text-[var(--fw-accent)]">{simResult.medianMonths} mo</div>
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">80% CI</div>
-              <div className="text-xl font-semibold tnum">{simResult.p10Months}-{simResult.p90Months}</div>
+              <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--fw-text-3)] font-semibold mb-1">80% CI</div>
+              <div className="text-2xl font-semibold tnum">{simResult.p10Months}-{simResult.p90Months}</div>
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">Projected Date</div>
+              <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--fw-text-3)] font-semibold mb-1">Projected Date</div>
               <div className="text-base font-semibold tnum">{simResult.projectedDate}</div>
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">Success Probability</div>
-              <div className="text-xl font-semibold tnum text-[var(--fw-positive)]">{simResult.successProbability}%</div>
+              <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--fw-text-3)] font-semibold mb-1">Success Probability</div>
+              <div className="text-2xl font-semibold tnum text-[var(--fw-positive)]">{simResult.successProbability}%</div>
             </div>
           </div>
           <div>
-            <div className="text-[11px] font-semibold text-[var(--fw-text-2)] mb-2 uppercase tracking-wider">Sensitivity scenarios</div>
+            <div className="text-[11px] font-semibold text-[var(--fw-text-2)] mb-2 uppercase tracking-[0.12em]">Sensitivity scenarios</div>
             <div className="space-y-1.5">
               {simResult.scenarios.map((s: any, i: number) => (
-                <div key={i} className="flex items-center justify-between text-[12px] py-1.5 px-2 rounded bg-[var(--fw-surface-2)]/50">
-                  <span className="text-[var(--fw-text-2)]">{s.label}</span>
+                <div key={i} className="flex items-center justify-between text-[12px] py-2 px-3 rounded-lg bg-[var(--fw-surface)] border border-[var(--fw-border)]">
+                  <span className="text-[var(--fw-text-2)] font-medium">{s.label}</span>
                   <div className="flex items-center gap-3">
                     <span className="tnum text-[var(--fw-text-3)]">{s.newMonthlyCents >= 100000 ? fmt(s.newMonthlyCents, { compact: true }) : fmt(s.newMonthlyCents)}/mo</span>
                     <span className="tnum font-medium text-[var(--fw-text)]">{s.baseMonths} mo</span>
                     {s.daysSaved > 0 && (
-                      <span className="tnum text-[var(--fw-positive)] font-medium">-{s.daysSaved}d</span>
+                      <span className="tnum text-[var(--fw-positive)] font-semibold">-{s.daysSaved}d</span>
                     )}
                   </div>
                 </div>
@@ -1331,28 +1220,29 @@ function InsightsView({ anomalies, momDeltas, topMerchants, subscriptions, recs,
   onUpdateRec: (id: string, status: 'accepted' | 'dismissed') => void
 }) {
   return (
-    <div className="p-5 sm:p-6 lg:p-8 space-y-6 max-w-[1200px]">
+    <div className="p-6 sm:p-8 lg:p-10 space-y-6 max-w-[1200px]">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Insights</h1>
-        <p className="text-sm text-[var(--fw-text-3)] mt-1">
-          {anomalies.length} anomalies · {momDeltas.length} categories tracked · {subscriptions.length} recurring subscriptions
+        <h1 className="text-[28px] font-semibold tracking-tight">Insights</h1>
+        <p className="text-[13px] text-[var(--fw-text-3)] mt-1">
+          <span className="text-[var(--fw-text-2)] font-medium">{anomalies.length}</span> anomalies · <span className="text-[var(--fw-text-2)] font-medium">{momDeltas.length}</span> categories tracked · <span className="text-[var(--fw-text-2)] font-medium">{subscriptions.length}</span> recurring subscriptions
         </p>
       </div>
 
-      {/* Anomalies + MoM */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
           <div className="flex items-center gap-2 mb-4">
-            <AlertTriangle className="h-4 w-4 text-amber-500" />
-            <h2 className="text-sm font-semibold">Anomaly Detection</h2>
-            <Badge variant="outline" className="text-[10px] ml-auto">{anomalies.length} flagged</Badge>
+            <AlertTriangle className="h-4 w-4 text-[var(--fw-warning)]" />
+            <h2 className="text-[14px] font-semibold">Anomaly Detection</h2>
+            <span className="ml-auto text-[10px] font-semibold px-2 py-1 rounded-md bg-[var(--fw-warning-soft)] text-[var(--fw-warning)] border border-[var(--fw-warning-border)]">
+              {anomalies.length} flagged
+            </span>
           </div>
           <div className="space-y-2">
             {anomalies.length === 0 ? (
               <div className="text-center py-8 text-[var(--fw-text-3)] text-xs">No anomalies detected</div>
             ) : (
               anomalies.map((a) => (
-                <div key={a.id} className="flex items-center gap-3 p-2 rounded-md bg-amber-50/50 dark:bg-amber-950/10 border border-amber-200 dark:border-amber-900/40">
+                <div key={a.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-[var(--fw-warning-soft)] border border-[var(--fw-warning-border)]">
                   <div className="h-8 w-8 rounded-md flex items-center justify-center flex-shrink-0" style={{ backgroundColor: a.color }}>
                     <AlertTriangle className="h-4 w-4 text-white" />
                   </div>
@@ -1364,7 +1254,7 @@ function InsightsView({ anomalies, momDeltas, topMerchants, subscriptions, recs,
                   </div>
                   <div className="text-right">
                     <div className="text-[12px] font-semibold tnum">{fmt(a.amountCents)}</div>
-                    {a.score && <div className="text-[9px] text-amber-600 dark:text-amber-400 font-mono">score: {a.score.toFixed(2)}</div>}
+                    {a.score && <div className="text-[9px] text-[var(--fw-warning)] font-mono">score: {a.score.toFixed(2)}</div>}
                   </div>
                 </div>
               ))
@@ -1372,10 +1262,10 @@ function InsightsView({ anomalies, momDeltas, topMerchants, subscriptions, recs,
           </div>
         </Card>
 
-        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
           <div className="flex items-center gap-2 mb-4">
             <BarChart3 className="h-4 w-4 text-[var(--fw-text-2)]" />
-            <h2 className="text-sm font-semibold">Month-over-Month Changes</h2>
+            <h2 className="text-[14px] font-semibold">Month-over-Month</h2>
           </div>
           <div className="space-y-2">
             {momDeltas.slice(0, 8).map((d, i) => (
@@ -1400,12 +1290,11 @@ function InsightsView({ anomalies, momDeltas, topMerchants, subscriptions, recs,
         </Card>
       </div>
 
-      {/* Top merchants + subscriptions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
           <div className="flex items-center gap-2 mb-4">
             <TrendingUp className="h-4 w-4 text-[var(--fw-text-2)]" />
-            <h2 className="text-sm font-semibold">Top Merchants (3 months)</h2>
+            <h2 className="text-[14px] font-semibold">Top Merchants (3 months)</h2>
           </div>
           <div className="h-64 -mx-2">
             {topMerchants.length > 0 ? (
@@ -1416,9 +1305,9 @@ function InsightsView({ anomalies, momDeltas, topMerchants, subscriptions, recs,
                   <YAxis type="category" dataKey="merchant" tick={{ fontSize: 10, fill: 'var(--fw-text-2)' }} tickLine={false} axisLine={false} width={85} />
                   <Tooltip
                     formatter={(value: any) => typeof value === 'number' && !isNaN(value) ? fmt(value) : ''}
-                    contentStyle={{ fontSize: '11px', borderRadius: '6px', padding: '6px 10px', border: '1px solid var(--fw-border)', background: 'var(--fw-surface)' }}
+                    contentStyle={{ fontSize: '11px', borderRadius: '8px', padding: '8px 12px', border: '1px solid var(--fw-border)', background: 'var(--fw-surface)', boxShadow: 'var(--fw-shadow-md)' }}
                   />
-                  <Bar dataKey="cents" radius={[0, 4, 4, 0]}>
+                  <Bar dataKey="cents" radius={[0, 6, 6, 0]}>
                     {topMerchants.map((m, i) => <Cell key={i} fill={m.color} />)}
                   </Bar>
                 </BarChart>
@@ -1427,22 +1316,20 @@ function InsightsView({ anomalies, momDeltas, topMerchants, subscriptions, recs,
           </div>
         </Card>
 
-        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
           <div className="flex items-center gap-2 mb-4">
             <RefreshCw className="h-4 w-4 text-[var(--fw-text-2)]" />
-            <h2 className="text-sm font-semibold">Recurring Subscriptions</h2>
+            <h2 className="text-[14px] font-semibold">Recurring Subscriptions</h2>
           </div>
           <div className="space-y-1.5">
             {subscriptions.map((s, i) => (
-              <div key={i} className="flex items-center gap-3 py-1.5 px-2 rounded hover:bg-[var(--fw-surface-2)]/50">
+              <div key={i} className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-[var(--fw-surface-2)]/50 transition-colors">
                 <div className="h-7 w-7 rounded-md flex items-center justify-center flex-shrink-0" style={{ backgroundColor: s.color }}>
                   <RefreshCw className="h-3.5 w-3.5 text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-[12px] font-medium truncate">{s.merchant}</div>
-                  <div className="text-[10px] text-[var(--fw-text-3)]">
-                    {s.category} · {s.monthsActive} mo active
-                  </div>
+                  <div className="text-[10px] text-[var(--fw-text-3)]">{s.category} · {s.monthsActive} mo active</div>
                 </div>
                 <div className="text-right">
                   <div className="text-[12px] font-semibold tnum">{fmt(s.monthlyAverageCents)}/mo</div>
@@ -1455,16 +1342,15 @@ function InsightsView({ anomalies, momDeltas, topMerchants, subscriptions, recs,
         </Card>
       </div>
 
-      {/* Recommendations */}
-      <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+      <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-amber-500" />
-            <h2 className="text-sm font-semibold">Recommendations</h2>
+            <Sparkles className="h-4 w-4 text-[var(--fw-warning)]" />
+            <h2 className="text-[14px] font-semibold">Recommendations</h2>
           </div>
-          <Badge variant="outline" className="text-[10px] font-medium border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-400">
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-md bg-[var(--fw-positive-soft)] text-[var(--fw-positive)] border border-[var(--fw-positive-border)]">
             +{fmt(recs.filter(r => r.status === 'pending').reduce((s, r) => s + r.impactCents, 0))}/yr potential
-          </Badge>
+          </span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {recs.map((r) => <RecCard key={r.id} r={r} tier={tier} onAction={onUpdateRec} />)}
@@ -1490,20 +1376,20 @@ function ChatPanel(props: {
   const { messages, input, setInput, chatLoading, sendChat, scrollRef, quickPrompts, privacyMode, onClose } = props
   return (
     <>
-      <div className="flex items-center justify-between px-4 h-12 border-b border-[var(--fw-border)] bg-[var(--fw-surface-2)]/50 flex-shrink-0">
+      <div className="flex items-center justify-between px-4 h-12 border-b border-[var(--fw-border)] bg-[var(--fw-surface)] flex-shrink-0">
         <div className="flex items-center gap-2">
-          <div className="h-6 w-6 rounded-md bg-[var(--fw-text)] flex items-center justify-center">
-            <Bot className="h-3.5 w-3.5 text-[var(--fw-surface)]" />
+          <div className="h-7 w-7 rounded-md bg-gradient-to-br from-[var(--fw-accent)] to-[var(--fw-accent-hover)] flex items-center justify-center shadow-[var(--fw-shadow-glow)]">
+            <Bot className="h-3.5 w-3.5 text-white" />
           </div>
           <div className="flex flex-col leading-none">
-            <span className="text-xs font-semibold">FinWise Agent</span>
+            <span className="text-[13px] font-semibold">FinWise Agent</span>
             <span className="text-[10px] text-[var(--fw-text-3)]">Supervisor-Worker · 7 tools</span>
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className={`h-1.5 w-1.5 rounded-full ${privacyMode ? 'bg-[var(--fw-accent)]' : 'bg-emerald-500'}`} />
+          <span className={`h-1.5 w-1.5 rounded-full ${privacyMode ? 'bg-[var(--fw-accent)]' : 'bg-[var(--fw-positive)]'} fw-pulse`} />
           <span className="text-[10px] font-medium text-[var(--fw-text-2)] mr-1.5">{privacyMode ? 'Local' : 'Cloud'}</span>
-          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onClose}>
+          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-[var(--fw-surface-2)]" onClick={onClose}>
             <XIcon className="h-3.5 w-3.5 text-[var(--fw-text-3)]" />
           </Button>
         </div>
@@ -1514,8 +1400,8 @@ function ChatPanel(props: {
           {messages.map((m, i) => <MessageBubble key={i} m={m} />)}
           {chatLoading && (
             <div className="flex items-start gap-3">
-              <div className="h-7 w-7 rounded-md bg-[var(--fw-text)] flex items-center justify-center flex-shrink-0">
-                <Bot className="h-3.5 w-3.5 text-[var(--fw-surface)]" />
+              <div className="h-7 w-7 rounded-md bg-gradient-to-br from-[var(--fw-accent)] to-[var(--fw-accent-hover)] flex items-center justify-center flex-shrink-0">
+                <Bot className="h-3.5 w-3.5 text-white" />
               </div>
               <div className="bg-[var(--fw-surface-2)] rounded-lg rounded-tl-sm px-3.5 py-2.5 flex items-center gap-2 border border-[var(--fw-border)]">
                 <Loader2 className="h-3 w-3 animate-spin text-[var(--fw-text-3)]" />
@@ -1528,13 +1414,13 @@ function ChatPanel(props: {
 
       {messages.length <= 1 && (
         <div className="px-4 py-3 border-t border-[var(--fw-border)] bg-[var(--fw-surface-2)]/30 flex-shrink-0">
-          <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-2">Suggested Prompts</div>
+          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--fw-text-3)] font-semibold mb-2">Suggested Prompts</div>
           <div className="grid grid-cols-2 gap-1.5">
             {quickPrompts.map((p) => (
               <button
                 key={p.label}
                 onClick={() => sendChat(p.text)}
-                className="text-left text-[11px] px-2.5 py-2 rounded-md bg-[var(--fw-surface)] hover:bg-[var(--fw-accent-soft)] border border-[var(--fw-border)] hover:border-[var(--fw-accent)] transition-all fw-focus text-[var(--fw-text-2)] leading-tight"
+                className="text-left text-[11px] px-2.5 py-2 rounded-lg bg-[var(--fw-surface)] hover:bg-[var(--fw-accent-soft)] border border-[var(--fw-border)] hover:border-[var(--fw-accent-border)] hover:text-[var(--fw-accent)] transition-all fw-focus text-[var(--fw-text-2)] leading-tight"
               >
                 {p.label}
               </button>
@@ -1555,14 +1441,14 @@ function ChatPanel(props: {
               }
             }}
             placeholder="Ask FinWise..."
-            className="flex-1 h-9 text-[13px] border-[var(--fw-border)] bg-[var(--fw-surface)] placeholder:text-[var(--fw-text-3)]"
+            className="flex-1 h-9 text-[13px] border-[var(--fw-border)] bg-[var(--fw-surface-2)] placeholder:text-[var(--fw-text-3)] rounded-lg"
             disabled={chatLoading}
           />
           <Button
             onClick={() => sendChat()}
             disabled={chatLoading || !input.trim()}
             size="sm"
-            className="h-9 px-3 bg-[var(--fw-text)] hover:bg-[var(--fw-text-2)] text-[var(--fw-surface)]"
+            className="h-9 px-3 bg-gradient-to-br from-[var(--fw-accent)] to-[var(--fw-accent-hover)] hover:opacity-90 text-white rounded-lg shadow-[var(--fw-shadow-glow)]"
           >
             <Send className="h-3.5 w-3.5" />
           </Button>
@@ -1587,12 +1473,14 @@ function MessageBubble({ m }: { m: ChatMessage }) {
   return (
     <div className={`flex items-start gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
       <div className={`h-7 w-7 rounded-md flex items-center justify-center flex-shrink-0 ${
-        isUser ? 'bg-[var(--fw-surface-2)] border border-[var(--fw-border)]' : 'bg-[var(--fw-text)]'
+        isUser
+          ? 'bg-[var(--fw-surface-2)] border border-[var(--fw-border)]'
+          : 'bg-gradient-to-br from-[var(--fw-accent)] to-[var(--fw-accent-hover)] shadow-[var(--fw-shadow-glow)]'
       }`}>
-        {isUser ? <User className="h-3.5 w-3.5 text-[var(--fw-text-2)]" /> : <Bot className="h-3.5 w-3.5 text-[var(--fw-surface)]" />}
+        {isUser ? <User className="h-3.5 w-3.5 text-[var(--fw-text-2)]" /> : <Bot className="h-3.5 w-3.5 text-white" />}
       </div>
       <div className={`max-w-[88%] ${isUser ? 'text-right' : ''}`}>
-        <div className={`inline-block text-[13px] leading-relaxed px-3.5 py-2.5 rounded-lg ${
+        <div className={`inline-block text-[13px] leading-relaxed px-3.5 py-2.5 rounded-xl ${
           isUser
             ? 'bg-[var(--fw-text)] text-[var(--fw-surface)] rounded-tr-sm'
             : 'bg-[var(--fw-surface-2)] text-[var(--fw-text)] rounded-tl-sm border border-[var(--fw-border)]'
@@ -1602,15 +1490,15 @@ function MessageBubble({ m }: { m: ChatMessage }) {
         {!isUser && m.toolCalls && m.toolCalls.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-1">
             {m.toolCalls.map((tc, i) => (
-              <span key={i} className="inline-flex items-center gap-1 text-[9px] font-mono px-1.5 py-0.5 rounded bg-[var(--fw-surface-2)] border border-[var(--fw-border)] text-[var(--fw-text-2)]">
-                <Zap className="h-2 w-2 text-[var(--fw-accent)]" />
+              <span key={i} className="inline-flex items-center gap-1 text-[9px] font-mono px-1.5 py-0.5 rounded bg-[var(--fw-accent-soft)] border border-[var(--fw-accent-border)] text-[var(--fw-accent)]">
+                <Zap className="h-2 w-2" />
                 {tc.name}
               </span>
             ))}
           </div>
         )}
         {!isUser && m.mode && (
-          <div className="text-[10px] text-[var(--fw-text-3)] mt-1 ml-1 font-mono uppercase tracking-wider">
+          <div className="text-[10px] text-[var(--fw-text-3)] mt-1 ml-1 font-mono uppercase tracking-[0.1em]">
             {m.mode.replace('_', ' ')}
           </div>
         )}
@@ -1666,7 +1554,7 @@ function FormattedContent({ content }: { content: string }) {
   )
 }
 
-function KpiCard({ label, value, delta, deltaDirection, icon, negative, highlight }: {
+function KpiCard({ label, value, delta, deltaDirection, icon, negative, highlight, accent }: {
   label: string
   value: string
   delta: string
@@ -1674,27 +1562,32 @@ function KpiCard({ label, value, delta, deltaDirection, icon, negative, highligh
   icon: React.ReactNode
   negative?: boolean
   highlight?: boolean
+  accent?: 'positive' | 'negative' | 'accent'
 }) {
   return (
-    <Card className={`p-4 border shadow-[var(--fw-shadow-sm)] transition-shadow hover:shadow-[var(--fw-shadow-md)] ${
-      highlight ? 'border-[var(--fw-text)] bg-[var(--fw-text)] text-[var(--fw-surface)]' : 'border-[var(--fw-border)] bg-[var(--fw-surface)]'
+    <Card className={`p-5 border shadow-[var(--fw-shadow-sm)] rounded-xl fw-card ${
+      highlight ? 'border-[var(--fw-accent-border)] bg-gradient-to-br from-[var(--fw-accent-soft)] to-[var(--fw-surface)]' : 'border-[var(--fw-border)] bg-[var(--fw-surface)]'
     }`}>
-      <div className="flex items-center justify-between mb-2">
-        <span className={`text-[10px] uppercase tracking-wider font-semibold ${highlight ? 'text-[var(--fw-surface)]/70' : 'text-[var(--fw-text-3)]'}`}>
-          {label}
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-[var(--fw-text-3)]">{label}</span>
+        <span className={`h-7 w-7 rounded-md flex items-center justify-center ${
+          accent === 'positive' ? 'bg-[var(--fw-positive-soft)] text-[var(--fw-positive)]' :
+          accent === 'negative' ? 'bg-[var(--fw-negative-soft)] text-[var(--fw-negative)]' :
+          highlight ? 'bg-[var(--fw-accent)] text-white' : 'bg-[var(--fw-surface-2)] text-[var(--fw-text-3)]'
+        }`}>
+          {icon}
         </span>
-        <span className={highlight ? 'text-[var(--fw-surface)]/70' : 'text-[var(--fw-text-3)]'}>{icon}</span>
       </div>
       <div className="flex items-baseline gap-2">
-        <span className={`text-xl font-semibold tnum tracking-tight ${highlight ? 'text-[var(--fw-surface)]' : 'text-[var(--fw-text)]'}`}>{value}</span>
+        <span className={`text-[26px] font-semibold tnum tracking-tight ${highlight ? 'text-[var(--fw-accent)]' : 'text-[var(--fw-text)]'}`}>{value}</span>
       </div>
-      <div className="flex items-center gap-1 mt-1.5">
+      <div className="flex items-center gap-1 mt-2">
         {deltaDirection === 'up' ? (
-          <TrendingUp className={`h-3 w-3 ${highlight ? 'text-[var(--fw-surface)]/70' : negative ? 'text-[var(--fw-negative)]' : 'text-[var(--fw-positive)]'}`} />
+          <TrendingUp className={`h-3 w-3 ${negative ? 'text-[var(--fw-negative)]' : 'text-[var(--fw-positive)]'}`} />
         ) : (
-          <TrendingDown className={`h-3 w-3 ${highlight ? 'text-[var(--fw-surface)]/70' : 'text-[var(--fw-negative)]'}`} />
+          <TrendingDown className="h-3 w-3 text-[var(--fw-negative)]" />
         )}
-        <span className={`text-[10px] font-medium ${highlight ? 'text-[var(--fw-surface)]/70' : 'text-[var(--fw-text-2)]'}`}>{delta}</span>
+        <span className={`text-[11px] font-medium ${negative ? 'text-[var(--fw-negative)]' : 'text-[var(--fw-text-2)]'}`}>{delta}</span>
       </div>
     </Card>
   )
@@ -1717,9 +1610,7 @@ function BudgetRow({ b, tier, onUpdate }: { b: BudgetItem; tier: Tier; onUpdate:
       })
       toast.success(`Updated ${b.category} budget to $${newVal}`)
       onUpdate()
-    } catch (err: any) {
-      toast.error(err.message)
-    }
+    } catch (err: any) { toast.error(err.message) }
     setEditing(false)
   }
 
@@ -1736,7 +1627,7 @@ function BudgetRow({ b, tier, onUpdate }: { b: BudgetItem; tier: Tier; onUpdate:
         </div>
         <div className="h-1 bg-[var(--fw-surface-2)] rounded-full overflow-hidden">
           <div
-            className={`h-full rounded-full transition-all ${overBudget ? 'bg-[var(--fw-negative)]' : nearLimit ? 'bg-amber-500' : 'bg-[var(--fw-positive)]'}`}
+            className={`h-full rounded-full transition-all ${overBudget ? 'bg-[var(--fw-negative)]' : nearLimit ? 'bg-[var(--fw-warning)]' : 'bg-[var(--fw-positive)]'}`}
             style={{ width: `${Math.min(100, b.percentUsed)}%` }}
           />
         </div>
@@ -1754,7 +1645,7 @@ function BudgetRow({ b, tier, onUpdate }: { b: BudgetItem; tier: Tier; onUpdate:
       )}
       {editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setEditing(false)}>
-          <div className="bg-[var(--fw-surface)] rounded-lg p-5 w-80 border border-[var(--fw-border)] shadow-[var(--fw-shadow-lg)]" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-[var(--fw-surface)] rounded-xl p-5 w-80 border border-[var(--fw-border)] shadow-[var(--fw-shadow-lg)]" onClick={(e) => e.stopPropagation()}>
             <div className="text-sm font-semibold mb-1">Edit {b.category} budget</div>
             <div className="text-[11px] text-[var(--fw-text-3)] mb-3">Set monthly envelope allocation</div>
             <div className="relative">
@@ -1762,8 +1653,8 @@ function BudgetRow({ b, tier, onUpdate }: { b: BudgetItem; tier: Tier; onUpdate:
               <Input value={value} onChange={(e) => setValue(e.target.value)} type="number" className="pl-7" autoFocus />
             </div>
             <div className="flex gap-2 mt-4">
-              <Button variant="outline" size="sm" className="flex-1" onClick={() => setEditing(false)}>Cancel</Button>
-              <Button size="sm" className="flex-1 bg-[var(--fw-text)] hover:bg-[var(--fw-text-2)] text-[var(--fw-surface)]" onClick={save}>Save</Button>
+              <Button variant="outline" size="sm" className="flex-1 rounded-lg" onClick={() => setEditing(false)}>Cancel</Button>
+              <Button size="sm" className="flex-1 bg-[var(--fw-text)] hover:bg-[var(--fw-text-2)] text-[var(--fw-surface)] rounded-lg" onClick={save}>Save</Button>
             </div>
           </div>
         </div>
@@ -1775,14 +1666,14 @@ function BudgetRow({ b, tier, onUpdate }: { b: BudgetItem; tier: Tier; onUpdate:
 function TxnRow({ t }: { t: Txn }) {
   const isCredit = t.direction === 'credit'
   return (
-    <div className="flex items-center gap-3 py-1.5 px-2 rounded-md hover:bg-[var(--fw-surface-2)] transition-colors">
+    <div className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-[var(--fw-surface-2)] transition-colors">
       <div className="h-7 w-7 rounded-md flex items-center justify-center flex-shrink-0 text-[9px] font-bold text-white" style={{ backgroundColor: t.category.color }}>
         {t.category.name.slice(0, 2).toUpperCase()}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <span className="text-[12px] font-medium truncate">{t.merchantRaw}</span>
-          {t.anomaly && <AlertTriangle className="h-3 w-3 text-amber-500 flex-shrink-0" />}
+          {t.anomaly && <AlertTriangle className="h-3 w-3 text-[var(--fw-warning)] flex-shrink-0" />}
           {t.recurring && <span className="text-[8px] font-medium uppercase tracking-wider px-1 py-0.5 rounded bg-[var(--fw-surface-2)] text-[var(--fw-text-3)] border border-[var(--fw-border)]">Recurring</span>}
         </div>
         <div className="text-[10px] text-[var(--fw-text-3)]">
@@ -1798,7 +1689,7 @@ function TxnRow({ t }: { t: Txn }) {
 
 function GoalCard({ g }: { g: GoalItem }) {
   const pct = Math.min(100, g.percentComplete)
-  const color = pct >= 80 ? '#15803d' : pct >= 50 ? '#b45309' : '#0f766e'
+  const color = pct >= 80 ? 'var(--fw-positive)' : pct >= 50 ? 'var(--fw-warning)' : 'var(--fw-accent)'
   return (
     <div className="flex items-center gap-3">
       <div className="relative h-12 w-12 flex-shrink-0">
@@ -1828,19 +1719,19 @@ function RecCard({ r, tier, onAction }: {
   const isDismissed = r.status === 'dismissed'
 
   return (
-    <div className={`p-3 rounded-lg border text-[12px] transition-all ${
+    <div className={`p-3 rounded-xl border text-[12px] transition-all ${
       isAccepted
-        ? 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/50 dark:bg-emerald-950/20'
+        ? 'border-[var(--fw-positive-border)] bg-[var(--fw-positive-soft)]'
         : isDismissed
         ? 'border-[var(--fw-border)] bg-[var(--fw-surface-2)] opacity-60'
-        : 'border-[var(--fw-border)] bg-[var(--fw-surface)] hover:border-[var(--fw-text-3)]'
+        : 'border-[var(--fw-border)] bg-[var(--fw-surface)] hover:border-[var(--fw-border-strong)]'
     }`}>
       <div className="flex items-start justify-between gap-2 mb-1.5">
         <div className="font-semibold leading-tight text-[12px]">{r.title}</div>
         <span className={`text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0 ${
-          r.confidence === 'high' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400' :
-          r.confidence === 'medium' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400' :
-          'bg-[var(--fw-surface-2)] text-[var(--fw-text-3)]'
+          r.confidence === 'high' ? 'bg-[var(--fw-positive-soft)] text-[var(--fw-positive)] border border-[var(--fw-positive-border)]' :
+          r.confidence === 'medium' ? 'bg-[var(--fw-warning-soft)] text-[var(--fw-warning)] border border-[var(--fw-warning-border)]' :
+          'bg-[var(--fw-surface-2)] text-[var(--fw-text-3)] border border-[var(--fw-border)]'
         }`}>{r.confidence}</span>
       </div>
       <div className="text-[11px] text-[var(--fw-text-2)] mb-2 leading-relaxed">{r.detail}</div>
@@ -1848,7 +1739,7 @@ function RecCard({ r, tier, onAction }: {
         <span className="text-[11px] font-mono tnum font-semibold text-[var(--fw-positive)]">+{fmt(r.impactCents)}/yr</span>
         {isPending && tier !== 'Viewer' && (
           <div className="flex gap-1">
-            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-[var(--fw-positive)] hover:bg-emerald-50 dark:hover:bg-emerald-950/30" onClick={() => onAction(r.id, 'accepted')}>
+            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-[var(--fw-positive)] hover:bg-[var(--fw-positive-soft)]" onClick={() => onAction(r.id, 'accepted')}>
               <Check className="h-3.5 w-3.5" />
             </Button>
             <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-[var(--fw-text-3)] hover:bg-[var(--fw-surface-2)]" onClick={() => onAction(r.id, 'dismissed')}>
@@ -1859,6 +1750,22 @@ function RecCard({ r, tier, onAction }: {
         {isAccepted && <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[var(--fw-positive)]"><Check className="h-3 w-3" /> Accepted</span>}
         {isDismissed && <span className="text-[10px] text-[var(--fw-text-3)]">Dismissed</span>}
       </div>
+    </div>
+  )
+}
+
+function SystemRow({ icon: Icon, label, value, highlight }: {
+  icon: React.ComponentType<{ className?: string }>; label: string; value: string; highlight?: boolean
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-1.5 text-[var(--fw-text-3)]">
+        <Icon className="h-3 w-3" />
+        <span>{label}</span>
+      </div>
+      <span className={`font-mono tnum font-medium ${highlight ? 'text-[var(--fw-accent)]' : 'text-[var(--fw-text-2)]'}`}>
+        {value}
+      </span>
     </div>
   )
 }
