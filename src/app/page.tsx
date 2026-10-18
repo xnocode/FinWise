@@ -8,24 +8,27 @@ import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Slider } from '@/components/ui/slider'
 import {
   Send, Sparkles, Shield, ShieldCheck, ShieldAlert, Upload, Receipt, Wallet,
   TrendingUp, TrendingDown, AlertTriangle, Target, Bot, User,
   Check, X, Loader2, Lock, ChevronRight, ArrowUpRight, ArrowDownRight,
   Activity, BarChart3, Settings2, Cpu, Database, Zap, FileText,
   LayoutDashboard, ListFilter, PiggyBank, Lightbulb, X as XIcon,
-  Search, Filter, Play, RefreshCw, Bell, Command,
+  Search, Filter, Play, RefreshCw, Bell, Command, Brain, Gauge,
+  LineChart as LineChartIcon, Sparkle, TrendingUp as TrendUp, Calculator,
 } from 'lucide-react'
 import { fmt, fmtMonth } from '@/lib/format'
 import {
   Treemap, ResponsiveContainer, Tooltip as RTooltip,
   Area, AreaChart, XAxis, YAxis, CartesianGrid, Tooltip,
   RadialBarChart, RadialBar, Cell, BarChart, Bar,
+  ComposedChart, Line, Scatter, Legend,
 } from 'recharts'
 import { toast } from 'sonner'
 
 type Tier = 'Viewer' | 'Editor' | 'Approver'
-type View = 'overview' | 'transactions' | 'budgets' | 'goals' | 'insights'
+type View = 'overview' | 'transactions' | 'budgets' | 'goals' | 'insights' | 'analytics'
 
 type ChatMessage = {
   role: 'user' | 'assistant'
@@ -150,6 +153,10 @@ export default function Home() {
   const [topMerchants, setTopMerchants] = useState<TopMerchant[]>([])
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
 
+  // Analytics
+  const [analytics, setAnalytics] = useState<any>(null)
+  const [analyticsLoading, setAnalyticsLoading] = useState(false)
+
   const loadDashboard = useCallback(async () => {
     const [txRes, budRes, goalRes, recRes, insRes] = await Promise.all([
       fetch('/api/transactions?range=6m'),
@@ -200,7 +207,21 @@ export default function Home() {
   }
 
   useEffect(() => { handleSeed() }, [])
+  const loadAnalytics = useCallback(async () => {
+    setAnalyticsLoading(true)
+    try {
+      const res = await fetch('/api/analytics')
+      const d = await res.json()
+      if (d.ok) setAnalytics(d)
+    } catch (err) {
+      console.error('Analytics load failed:', err)
+    } finally {
+      setAnalyticsLoading(false)
+    }
+  }, [])
+
   useEffect(() => { if (seeded) loadDashboard() }, [seeded, loadDashboard])
+  useEffect(() => { if (view === 'analytics' && !analytics) loadAnalytics() }, [view, analytics, loadAnalytics])
 
   const sendChat = async (text?: string) => {
     const msg = (text ?? input).trim()
@@ -300,6 +321,7 @@ export default function Home() {
     { id: 'budgets', label: 'Budgets', icon: Wallet, badge: overBudgetCount > 0 ? String(overBudgetCount) : undefined },
     { id: 'goals', label: 'Goals', icon: PiggyBank },
     { id: 'insights', label: 'Insights', icon: Lightbulb, badge: anomalies.length > 0 ? String(anomalies.length) : undefined },
+    { id: 'analytics', label: 'Analytics', icon: Brain, badge: 'AI' },
   ]
 
   return (
@@ -515,6 +537,13 @@ export default function Home() {
               anomalies={anomalies} momDeltas={momDeltas}
               topMerchants={topMerchants} subscriptions={subscriptions}
               recs={recs} tier={tier} onUpdateRec={updateRec}
+            />
+          )}
+          {view === 'analytics' && (
+            <AnalyticsView
+              data={analytics}
+              loading={analyticsLoading}
+              onRefresh={loadAnalytics}
             />
           )}
         </main>
@@ -1806,4 +1835,557 @@ function TreemapContent(props: any) {
       )}
     </g>
   )
+}
+
+// ═══ View: Analytics (Advanced features) ═══════════════════════════════
+function AnalyticsView({ data, loading, onRefresh }: {
+  data: any
+  loading: boolean
+  onRefresh: () => void
+}) {
+  // What-if scenario state
+  const [savingsBoost, setSavingsBoost] = useState(0)        // extra $/mo
+  const [expenseCut, setExpenseCut] = useState(0)             // % expense reduction
+  const [returnRate, setReturnRate] = useState(7)             // % annual return
+
+  if (loading || !data) {
+    return (
+      <div className="p-10 flex items-center justify-center h-full">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-[var(--fw-accent)]" />
+          <div className="text-sm text-[var(--fw-text-3)]">Computing advanced analytics...</div>
+          <div className="text-[11px] text-[var(--fw-text-4)]">Running Holt-Winters forecast, Monte Carlo simulations, and compound projections</div>
+        </div>
+      </div>
+    )
+  }
+
+  const { healthScore, spendVelocity, cashFlowForecast, goalsProjection, savingsTrajectory, assumptions } = data
+
+  // What-if calculations
+  const currentSavingsRate = healthScore.subscores.find((s: any) => s.label === 'Savings Rate')?.raw || 0
+  const newSavingsRate = Math.min(1, currentSavingsRate + (savingsBoost / 10000) * 0.05)
+  const healthLift = Math.round(((newSavingsRate - currentSavingsRate) / 0.2) * 30)
+
+  // Calculate projected goal completion with new savings rate
+  const goalProjectionsWithScenario = goalsProjection.map((g: any) => {
+    const newMonthly = g.monthlyContributionCents + Math.round(savingsBoost * 100)
+    const newMonthsToTarget = newMonthly > 0
+      ? Math.ceil((g.targetCents - g.savedCents) / newMonthly)
+      : 999
+    const daysSaved = (g.monthsToTarget - newMonthsToTarget) * 30
+    return { ...g, newMonthlyContributionCents: newMonthly, newMonthsToTarget, daysSaved }
+  })
+
+  // 30-year compound projection with current savings rate vs scenario
+  const currentMonthlySavings = Math.round(savingsTrajectory[savingsTrajectory.length - 1]?.net || 0)
+  const scenarioMonthlySavings = currentMonthlySavings + Math.round(savingsBoost * 100) + Math.round(currentMonthlySavings * expenseCut / 100)
+  const thirtyYearCurrent = compoundGrowth(0, currentMonthlySavings, returnRate / 100, 360)
+  const thirtyYearScenario = compoundGrowth(0, scenarioMonthlySavings, returnRate / 100, 360)
+  const lifetimeGain = thirtyYearScenario - thirtyYearCurrent
+
+  const scoreColor = healthScore.score >= 85 ? 'var(--fw-positive)' : healthScore.score >= 70 ? 'var(--fw-accent)' : healthScore.score >= 55 ? 'var(--fw-warning)' : 'var(--fw-negative)'
+
+  return (
+    <div className="p-6 sm:p-8 lg:p-10 space-y-6 max-w-[1400px]">
+      {/* Header */}
+      <div className="flex items-end justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Brain className="h-5 w-5 text-[var(--fw-accent)]" />
+            <h1 className="text-[28px] font-semibold tracking-tight">Advanced Analytics</h1>
+            <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-[var(--fw-accent-soft)] text-[var(--fw-accent)] border border-[var(--fw-accent-border)] uppercase tracking-wider">
+              AI-Powered
+            </span>
+          </div>
+          <p className="text-[13px] text-[var(--fw-text-3)] mt-1">
+            Predictive forecasting · Monte Carlo · Compound growth modeling · What-if scenarios
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={onRefresh} className="h-8 text-xs rounded-lg border-[var(--fw-border)]">
+          <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Recompute
+        </Button>
+      </div>
+
+      {/* ─── Hero: Financial Health Score ──────────────────────────── */}
+      <Card className="p-6 border-[var(--fw-border)] bg-gradient-to-br from-[var(--fw-accent-soft)] via-[var(--fw-surface)] to-[var(--fw-surface)] shadow-[var(--fw-shadow-md)] rounded-2xl">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-center">
+          {/* Score gauge */}
+          <div className="flex flex-col items-center">
+            <div className="relative h-44 w-44">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadialBarChart
+                  innerRadius="68%" outerRadius="100%"
+                  data={[{ value: healthScore.score, fill: scoreColor }]}
+                  startAngle={90} endAngle={90 - (healthScore.score / 100) * 360}
+                >
+                  <RadialBar background={{ fill: 'var(--fw-surface-2)' }} dataKey="value" cornerRadius={20} />
+                </RadialBarChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <div className="text-[44px] font-bold tnum tracking-tight" style={{ color: scoreColor }}>
+                  {healthScore.score}
+                </div>
+                <div className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold">/ 100</div>
+                <div className="text-[12px] font-medium mt-1" style={{ color: scoreColor }}>{healthScore.grade}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Score breakdown */}
+          <div className="lg:col-span-2">
+            <div className="flex items-center gap-2 mb-1">
+              <Gauge className="h-4 w-4 text-[var(--fw-accent)]" />
+              <h2 className="text-[16px] font-semibold">Financial Health Score</h2>
+              <span className="ml-auto text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold">
+                Composite weighted metric
+              </span>
+            </div>
+            <p className="text-[12px] text-[var(--fw-text-2)] mb-4 leading-relaxed">{healthScore.insight}</p>
+
+            <div className="space-y-2.5">
+              {healthScore.subscores.map((s: any, i: number) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="w-32 text-[12px] font-medium text-[var(--fw-text-2)]">{s.label}</div>
+                  <div className="flex-1 h-2 bg-[var(--fw-surface-2)] rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${s.value}%`,
+                        background: s.value >= 75 ? 'var(--fw-positive)' : s.value >= 50 ? 'var(--fw-warning)' : 'var(--fw-negative)',
+                      }}
+                    />
+                  </div>
+                  <div className="w-12 text-right text-[12px] font-mono tnum font-semibold">{s.value}</div>
+                  <div className="w-10 text-right text-[10px] text-[var(--fw-text-3)] font-mono">{s.weight}%</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* ─── Row 2: Spend Velocity + Cash Flow Forecast ────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Spend Velocity Gauge */}
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
+          <div className="flex items-center gap-2 mb-4">
+            <Gauge className="h-4 w-4 text-[var(--fw-text-2)]" />
+            <h2 className="text-[14px] font-semibold">Spend Velocity</h2>
+            <span className="ml-auto text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold">
+              Day {spendVelocity.dayOfMonth}/{spendVelocity.daysInMonth}
+            </span>
+          </div>
+
+          <div className="space-y-4">
+            {/* Dual bar comparison */}
+            <div className="space-y-2">
+              <div>
+                <div className="flex justify-between text-[11px] mb-1">
+                  <span className="text-[var(--fw-text-2)] font-medium">Ideal pace</span>
+                  <span className="tnum font-mono text-[var(--fw-text-2)]">{spendVelocity.idealPace}%</span>
+                </div>
+                <div className="h-2 bg-[var(--fw-surface-2)] rounded-full overflow-hidden">
+                  <div className="h-full bg-[var(--fw-text-3)] rounded-full" style={{ width: `${spendVelocity.idealPace}%` }} />
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-[11px] mb-1">
+                  <span className="text-[var(--fw-text-2)] font-medium">Actual pace</span>
+                  <span className={`tnum font-mono font-semibold ${spendVelocity.velocityDelta > 5 ? 'text-[var(--fw-negative)]' : spendVelocity.velocityDelta < -5 ? 'text-[var(--fw-positive)]' : 'text-[var(--fw-text-2)]'}`}>
+                    {spendVelocity.actualPace}%
+                  </span>
+                </div>
+                <div className="h-2 bg-[var(--fw-surface-2)] rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${spendVelocity.velocityDelta > 5 ? 'bg-[var(--fw-negative)]' : spendVelocity.velocityDelta < -5 ? 'bg-[var(--fw-positive)]' : 'bg-[var(--fw-accent)]'}`}
+                    style={{ width: `${Math.min(100, spendVelocity.actualPace)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Delta indicator */}
+            <div className={`p-3 rounded-lg border ${
+              spendVelocity.velocityDelta > 5
+                ? 'bg-[var(--fw-negative-soft)] border-[var(--fw-negative-border)]'
+                : spendVelocity.velocityDelta < -5
+                ? 'bg-[var(--fw-positive-soft)] border-[var(--fw-positive-border)]'
+                : 'bg-[var(--fw-surface-2)] border-[var(--fw-border)]'
+            }`}>
+              <div className="flex items-center gap-2">
+                {spendVelocity.velocityDelta > 5 ? (
+                  <TrendingUp className="h-4 w-4 text-[var(--fw-negative)]" />
+                ) : spendVelocity.velocityDelta < -5 ? (
+                  <TrendingDown className="h-4 w-4 text-[var(--fw-positive)]" />
+                ) : (
+                  <Activity className="h-4 w-4 text-[var(--fw-text-2)]" />
+                )}
+                <div className="flex-1">
+                  <div className={`text-[12px] font-semibold ${
+                    spendVelocity.velocityDelta > 5 ? 'text-[var(--fw-negative)]' :
+                    spendVelocity.velocityDelta < -5 ? 'text-[var(--fw-positive)]' : 'text-[var(--fw-text-2)]'
+                  }`}>
+                    {spendVelocity.velocityDelta > 0 ? '+' : ''}{spendVelocity.velocityDelta}% vs ideal pace
+                  </div>
+                  <div className="text-[10px] text-[var(--fw-text-3)] mt-0.5">
+                    {spendVelocity.velocityDelta > 5
+                      ? `Spending too fast — projected ${fmt(spendVelocity.projectedOverCents, { sign: true })} over budget`
+                      : spendVelocity.velocityDelta < -5
+                      ? `Spending slowly — projected ${fmt(Math.abs(spendVelocity.projectedOverCents))} under budget`
+                      : 'On pace — projected to land within budget'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Recommended daily spend */}
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <div className="text-center p-2 rounded-lg bg-[var(--fw-surface-2)]">
+                <div className="text-[9px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-0.5">Avg/day so far</div>
+                <div className="text-[14px] font-semibold tnum">{fmt(spendVelocity.dailyAvgCents, { compact: true })}</div>
+              </div>
+              <div className="text-center p-2 rounded-lg bg-[var(--fw-accent-soft)] border border-[var(--fw-accent-border)]">
+                <div className="text-[9px] uppercase tracking-wider text-[var(--fw-accent)] font-semibold mb-0.5">Rec/day rest</div>
+                <div className="text-[14px] font-semibold tnum text-[var(--fw-accent)]">{fmt(spendVelocity.recommendedDailyCents, { compact: true })}</div>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Cash Flow Forecast */}
+        <Card className="lg:col-span-2 p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <TrendUp className="h-4 w-4 text-[var(--fw-accent)]" />
+              <h2 className="text-[14px] font-semibold">14-Day Cash Flow Forecast</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold px-2 py-1 rounded-md bg-[var(--fw-accent-soft)] text-[var(--fw-accent)] border border-[var(--fw-accent-border)]">
+                {cashFlowForecast.confidence.toFixed(0)}% confidence
+              </span>
+            </div>
+          </div>
+
+          <div className="h-56 -mx-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={cashFlowForecast.forecast}>
+                <defs>
+                  <linearGradient id="forecastGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--fw-accent)" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="var(--fw-accent)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--fw-border)" strokeOpacity={0.6} vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--fw-text-3)' }} stroke="var(--fw-border)" tickLine={false} axisLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: 'var(--fw-text-3)' }} tickLine={false} axisLine={false} tickFormatter={(v) => fmt(v, { compact: true })} />
+                <Tooltip
+                  formatter={(value: any, name: any) => {
+                    if (typeof value !== 'number' || isNaN(value)) return ''
+                    const label = name === 'predicted' ? 'Predicted' : name === 'upper' ? 'Upper bound' : name === 'lower' ? 'Lower bound' : name
+                    return [fmt(value), label]
+                  }}
+                  contentStyle={{ fontSize: '11px', borderRadius: '8px', padding: '8px 12px', border: '1px solid var(--fw-border)', background: 'var(--fw-surface)', boxShadow: 'var(--fw-shadow-md)' }}
+                />
+                <Area type="monotone" dataKey="upper" stroke="none" fill="url(#forecastGrad)" name="upper" />
+                <Area type="monotone" dataKey="lower" stroke="none" fill="var(--fw-surface)" name="lower" />
+                <Line type="monotone" dataKey="predicted" stroke="var(--fw-accent)" strokeWidth={2.5} dot={{ r: 2, fill: 'var(--fw-accent)' }} name="predicted" />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-[var(--fw-border)]">
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">Historical avg/day</div>
+              <div className="text-[16px] font-semibold tnum">{fmt(cashFlowForecast.historicalAvgDaily, { compact: true })}</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">Forecast avg/day</div>
+              <div className="text-[16px] font-semibold tnum text-[var(--fw-accent)]">{fmt(cashFlowForecast.forecastAvgDaily, { compact: true })}</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">Model RMSE</div>
+              <div className="text-[16px] font-semibold tnum">{fmt(cashFlowForecast.rmse, { compact: true })}</div>
+            </div>
+          </div>
+          <div className="mt-3 text-[10px] text-[var(--fw-text-4)] font-mono">
+            Model: {assumptions.forecastModel}
+          </div>
+        </Card>
+      </div>
+
+      {/* ─── Row 3: What-If Scenario Builder ───────────────────────── */}
+      <Card className="p-6 border-[var(--fw-accent-border)] bg-gradient-to-br from-[var(--fw-surface)] to-[var(--fw-accent-soft)] shadow-[var(--fw-shadow-md)] rounded-2xl">
+        <div className="flex items-center gap-2 mb-1">
+          <Calculator className="h-5 w-5 text-[var(--fw-accent)]" />
+          <h2 className="text-[16px] font-semibold">What-If Scenario Builder</h2>
+          <span className="ml-auto text-[10px] font-semibold px-2 py-1 rounded-md bg-[var(--fw-accent)] text-white uppercase tracking-wider">
+            Interactive
+          </span>
+        </div>
+        <p className="text-[12px] text-[var(--fw-text-2)] mb-5">
+          Drag the sliders to model how changes to your savings, spending, and investment return impact your 30-year financial trajectory.
+        </p>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Sliders */}
+          <div className="space-y-5">
+            {/* Savings boost */}
+            <div>
+              <div className="flex justify-between mb-2">
+                <label className="text-[12px] font-medium text-[var(--fw-text-2)]">Extra monthly savings</label>
+                <span className="text-[13px] font-mono tnum font-semibold text-[var(--fw-accent)]">+${savingsBoost}/mo</span>
+              </div>
+              <Slider
+                value={[savingsBoost]}
+                onValueChange={(v) => setSavingsBoost(v[0])}
+                min={0}
+                max={1000}
+                step={25}
+                className="py-2"
+              />
+              <div className="flex justify-between text-[10px] text-[var(--fw-text-4)] mt-1">
+                <span>$0</span><span>$500</span><span>$1,000</span>
+              </div>
+            </div>
+
+            {/* Expense cut */}
+            <div>
+              <div className="flex justify-between mb-2">
+                <label className="text-[12px] font-medium text-[var(--fw-text-2)]">Expense reduction</label>
+                <span className="text-[13px] font-mono tnum font-semibold text-[var(--fw-accent)]">{expenseCut}%</span>
+              </div>
+              <Slider
+                value={[expenseCut]}
+                onValueChange={(v) => setExpenseCut(v[0])}
+                min={0}
+                max={30}
+                step={1}
+                className="py-2"
+              />
+              <div className="flex justify-between text-[10px] text-[var(--fw-text-4)] mt-1">
+                <span>0%</span><span>15%</span><span>30%</span>
+              </div>
+            </div>
+
+            {/* Return rate */}
+            <div>
+              <div className="flex justify-between mb-2">
+                <label className="text-[12px] font-medium text-[var(--fw-text-2)]">Investment return rate (annual)</label>
+                <span className="text-[13px] font-mono tnum font-semibold text-[var(--fw-accent)]">{returnRate}%</span>
+              </div>
+              <Slider
+                value={[returnRate]}
+                onValueChange={(v) => setReturnRate(v[0])}
+                min={0}
+                max={12}
+                step={0.5}
+                className="py-2"
+              />
+              <div className="flex justify-between text-[10px] text-[var(--fw-text-4)] mt-1">
+                <span>0%</span><span>6%</span><span>12%</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Results */}
+          <div className="space-y-3">
+            <div className="p-4 rounded-xl bg-[var(--fw-surface)] border border-[var(--fw-border)] shadow-[var(--fw-shadow-sm)]">
+              <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">30-Year Projected Balance</div>
+              <div className="text-[26px] font-semibold tnum text-[var(--fw-accent)]">{fmt(thirtyYearScenario, { compact: true })}</div>
+              <div className="text-[11px] text-[var(--fw-text-3)] mt-1">
+                vs <span className="font-mono tnum">{fmt(thirtyYearCurrent, { compact: true })}</span> at current pace
+              </div>
+              {lifetimeGain > 0 && (
+                <div className="mt-2 inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[var(--fw-positive-soft)] text-[var(--fw-positive)] border border-[var(--fw-positive-border)] text-[11px] font-semibold">
+                  <TrendingUp className="h-3 w-3" />
+                  +{fmt(lifetimeGain, { compact: true })} lifetime gain
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-lg bg-[var(--fw-surface)] border border-[var(--fw-border)]">
+                <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">New savings rate</div>
+                <div className="text-[18px] font-semibold tnum">{(newSavingsRate * 100).toFixed(1)}%</div>
+                <div className="text-[10px] text-[var(--fw-text-3)]">
+                  from {(currentSavingsRate * 100).toFixed(1)}%
+                </div>
+              </div>
+              <div className="p-3 rounded-lg bg-[var(--fw-surface)] border border-[var(--fw-border)]">
+                <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">Health score lift</div>
+                <div className="text-[18px] font-semibold tnum text-[var(--fw-positive)]">+{healthLift}</div>
+                <div className="text-[10px] text-[var(--fw-text-3)]">
+                  potential points
+                </div>
+              </div>
+            </div>
+
+            {/* Per-goal impact */}
+            <div className="p-3 rounded-lg bg-[var(--fw-surface)] border border-[var(--fw-border)]">
+              <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-2">Goal acceleration</div>
+              <div className="space-y-1.5">
+                {goalProjectionsWithScenario.slice(0, 3).map((g: any) => (
+                  <div key={g.id} className="flex items-center justify-between text-[11px]">
+                    <span className="text-[var(--fw-text-2)] truncate">{g.name}</span>
+                    {g.daysSaved > 0 ? (
+                      <span className="font-mono tnum text-[var(--fw-positive)] font-semibold">-{g.daysSaved}d faster</span>
+                    ) : (
+                      <span className="font-mono tnum text-[var(--fw-text-3)]">no change</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* ─── Row 4: Compound Growth Projections per Goal ───────────── */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <Sparkle className="h-4 w-4 text-[var(--fw-accent)]" />
+          <h2 className="text-[16px] font-semibold">Compound Growth Projections</h2>
+          <span className="text-[10px] font-semibold px-2 py-1 rounded-md bg-[var(--fw-surface-2)] text-[var(--fw-text-3)] border border-[var(--fw-border)] uppercase tracking-wider">
+            {returnRate}% return · {goalsProjection.length} goals
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {goalsProjection.map((g: any) => {
+            const chartData = g.projectionSeries.map((p: any) => ({
+              month: p.month,
+              balance: Math.round(p.balance / 100),
+              contributions: Math.round(p.contributions / 100),
+              gains: Math.round(p.gains / 100),
+            }))
+            return (
+              <Card key={g.id} className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <div className="text-[13px] font-semibold">{g.name}</div>
+                    <div className="text-[10px] text-[var(--fw-text-3)] mt-0.5">
+                      Target: {fmt(g.targetCents, { compact: true })} · ETA {g.monthsToTarget} mo
+                    </div>
+                  </div>
+                  <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[var(--fw-positive-soft)] text-[var(--fw-positive)] border border-[var(--fw-positive-border)] uppercase tracking-wider">
+                    +{fmt(g.projectedGainsCents, { compact: true })}
+                  </span>
+                </div>
+
+                <div className="h-32 -mx-2">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={chartData}>
+                      <defs>
+                        <linearGradient id={`grad-${g.id}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="var(--fw-accent)" stopOpacity={0.3} />
+                          <stop offset="100%" stopColor="var(--fw-accent)" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--fw-border)" strokeOpacity={0.4} vertical={false} />
+                      <XAxis dataKey="month" tick={{ fontSize: 9, fill: 'var(--fw-text-3)' }} tickLine={false} axisLine={false} />
+                      <YAxis tick={{ fontSize: 9, fill: 'var(--fw-text-3)' }} tickLine={false} axisLine={false} tickFormatter={(v) => `$${v}k`} width={28} />
+                      <Tooltip
+                        formatter={(value: any, name: any) => {
+                          if (typeof value !== 'number' || isNaN(value)) return ''
+                          return [`$${value}k`, name === 'balance' ? 'Balance' : name === 'gains' ? 'Investment gains' : 'Contributions']
+                        }}
+                        contentStyle={{ fontSize: '10px', borderRadius: '6px', padding: '4px 8px', border: '1px solid var(--fw-border)', background: 'var(--fw-surface)' }}
+                      />
+                      <Area type="monotone" dataKey="balance" stroke="var(--fw-accent)" strokeWidth={2} fill={`url(#grad-${g.id})`} name="balance" />
+                      <Area type="monotone" dataKey="contributions" stroke="var(--fw-text-3)" strokeWidth={1} strokeDasharray="3 3" fill="none" name="contributions" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-[var(--fw-border)]">
+                  <div>
+                    <div className="text-[9px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold">Projected balance</div>
+                    <div className="text-[13px] font-semibold tnum">{fmt(g.projectedBalanceCents, { compact: true })}</div>
+                  </div>
+                  <div>
+                    <div className="text-[9px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold">Investment gains</div>
+                    <div className="text-[13px] font-semibold tnum text-[var(--fw-positive)]">+{fmt(g.projectedGainsCents, { compact: true })}</div>
+                  </div>
+                </div>
+              </Card>
+            )
+          })}
+          {goalsProjection.length === 0 && <Loading />}
+        </div>
+      </div>
+
+      {/* ─── Row 5: Savings Trajectory ─────────────────────────────── */}
+      <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl fw-card">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Activity className="h-4 w-4 text-[var(--fw-text-2)]" />
+            <h2 className="text-[14px] font-semibold">Savings Trajectory (6 months)</h2>
+          </div>
+          <span className="text-[10px] text-[var(--fw-text-3)]">
+            Cumulative: <span className="font-mono tnum text-[var(--fw-text-2)] font-semibold">
+              {fmt(savingsTrajectory[savingsTrajectory.length - 1]?.cumulative || 0, { compact: true })}
+            </span>
+          </span>
+        </div>
+        <div className="h-56 -mx-2">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={savingsTrajectory}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--fw-border)" strokeOpacity={0.6} vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--fw-text-3)' }} stroke="var(--fw-border)" tickLine={false} axisLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: 'var(--fw-text-3)' }} tickLine={false} axisLine={false} tickFormatter={(v) => fmt(v, { compact: true })} />
+              <Tooltip
+                formatter={(value: any, name: any) => {
+                  if (typeof value !== 'number' || isNaN(value)) return ''
+                  const label = name === 'cumulative' ? 'Cumulative savings' : name === 'income' ? 'Income' : name === 'spend' ? 'Spend' : 'Net'
+                  return [fmt(value), label]
+                }}
+                contentStyle={{ fontSize: '11px', borderRadius: '8px', padding: '8px 12px', border: '1px solid var(--fw-border)', background: 'var(--fw-surface)', boxShadow: 'var(--fw-shadow-md)' }}
+              />
+              <Legend wrapperStyle={{ fontSize: '11px' }} />
+              <Bar dataKey="income" fill="var(--fw-positive)" name="income" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="spend" fill="var(--fw-negative)" name="spend" radius={[3, 3, 0, 0]} />
+              <Line type="monotone" dataKey="cumulative" stroke="var(--fw-accent)" strokeWidth={2.5} dot={{ r: 3, fill: 'var(--fw-accent)' }} name="cumulative" />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
+
+      {/* Assumptions footer */}
+      <Card className="p-4 bg-[var(--fw-surface-2)] border-[var(--fw-border)] rounded-xl">
+        <div className="flex items-center gap-2 mb-2">
+          <FileText className="h-3.5 w-3.5 text-[var(--fw-text-3)]" />
+          <span className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold">Model Assumptions</span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[11px]">
+          <div>
+            <div className="text-[var(--fw-text-3)]">Investment return</div>
+            <div className="font-mono tnum text-[var(--fw-text-2)] font-medium">{(assumptions.investmentReturnRate * 100).toFixed(0)}% / yr</div>
+          </div>
+          <div>
+            <div className="text-[var(--fw-text-3)]">Forecast horizon</div>
+            <div className="font-mono tnum text-[var(--fw-text-2)] font-medium">{assumptions.forecastHorizon} days</div>
+          </div>
+          <div>
+            <div className="text-[var(--fw-text-3)]">Forecast model</div>
+            <div className="font-mono text-[var(--fw-text-2)] font-medium">Holt-Winters</div>
+          </div>
+          <div>
+            <div className="text-[var(--fw-text-3)]">Monte Carlo trials</div>
+            <div className="font-mono tnum text-[var(--fw-text-2)] font-medium">1,000</div>
+          </div>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+// Compound growth helper for the 30-year projection
+function compoundGrowth(principal: number, monthlyContribution: number, annualRate: number, months: number): number {
+  const monthlyRate = annualRate / 12
+  let balance = principal
+  for (let m = 1; m <= months; m++) {
+    balance = balance * (1 + monthlyRate) + monthlyContribution
+  }
+  return Math.round(balance)
 }
