@@ -90,3 +90,49 @@ Stage Summary:
 - Professional fintech aesthetic: sophisticated neutral palette, deep teal accent, tabular numerals, refined typography hierarchy, custom scrollbars, theme-aware tokens.
 - All functionality preserved and verified end-to-end.
 - New "System Status" card surfaces architecture details (Supervisor-Worker, 4 workers, Z.ai Chat LLM, PII mode, permission tier, latency) for judges to see the engineering depth.
+
+---
+Task ID: 4
+Agent: Z.ai (main)
+Task: Redesign FinWise with sidebar + multi-view navigation pattern (Mercury/Ramp/Brex-style).
+
+Work Log:
+- Added /api/insights endpoint: returns anomalies, month-over-month deltas, top merchants, recurring subscriptions with monthly averages.
+- Completely rewrote page.tsx with sidebar + multi-view architecture:
+  - LEFT SIDEBAR (220px): FinWise logo, "Workspace" nav section with 5 views (Overview, Transactions, Budgets, Goals, Insights) — each with badge counts (Budgets shows "7" for over-budget, Insights shows "1" for anomalies). Footer with "System" status: architecture, workers, LLM, PII mode, latency.
+  - TOP HEADER (56px): brand + "Agent Online" pulse + bell icon (with pending rec count badge) + Cloud/Local toggle + tier selector + Reset.
+  - MAIN CONTENT: switches based on selected nav view.
+  - RIGHT CHAT PANEL (380px, dismissible): FinWise agent chat with quick prompts. Collapsible via X button — floating action button appears when closed.
+
+- Built 5 views:
+  1. Overview: hero KPIs (Income/Spend/Net Savings) + Spending by Category treemap + Monthly Trend area chart + Budget Status (top 6) + Top Recommendations (top 3) + Savings Goals (top 3) + Recent Transactions (top 25).
+  2. Transactions: filterable table with search input + category dropdown filter + count summary + 50-row paginated table with date/merchant/category/source/amount columns.
+  3. Budgets: summary card (Total Allocated/Total Spent/Remaining + percentage bar) + envelope grid with 2-column cards showing per-budget progress, edit modal.
+  4. Goals: detailed goal cards with radial progress + Run Monte Carlo simulation button → triggers /api/simulation with 1000 trials → displays result card with median/80% CI/projected date/success probability + sensitivity scenarios table (Cut dining 20%, Cancel 2 subscriptions, Add $100/mo side income with days saved).
+  5. Insights: Anomaly Detection list (with score), Month-over-Month changes, Top Merchants horizontal bar chart, Recurring Subscriptions list, full Recommendations grid.
+
+- Refined UX details:
+  - Notification bell in header shows pending rec count badge.
+  - Sidebar nav items show active state with subtle bg + accent color icon.
+  - Budget envelope cards highlight in red when over budget.
+  - Simulation result card uses accent border + larger shadow.
+  - Chat panel collapsible — floating action button (12x12 round, dark bg) appears when closed, hides when open.
+  - All numeric values use tnum (tabular numerals) class.
+  - Hover states on table rows, transactions, rec cards.
+
+- Verified end-to-end with agent-browser:
+  - All 5 views load correctly
+  - Sidebar navigation works (Overview → Transactions → Budgets → Goals → Insights)
+  - Monte Carlo simulation runs on Goals view, returns full result card with median/CI/probability/sensitivity scenarios
+  - Chat panel: closing via X button reveals floating action button; clicking floating button reopens chat
+  - Chat: sent "How did this month go?" → FinWise returned structured Monthly Review Summary with bold numbers and bullet points
+  - No console errors, no page errors, lint passes cleanly.
+  - Final preview screenshot: /home/z/my-project/download/finwise-v3-preview.png (232 KB).
+
+Stage Summary:
+- Upgraded from 3-column single-page to professional sidebar + multi-view fintech layout.
+- 5 distinct views each with their own purpose and detailed UI.
+- New Monte Carlo simulation UI surfaces the predictive differentiator visually.
+- Insights view consolidates anomaly detection, MoM changes, top merchants, recurring subs, and recommendations.
+- Sidebar footer makes the architecture visible to judges at all times.
+- Notification bell + badges surface pending actions.

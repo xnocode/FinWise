@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -14,16 +13,19 @@ import {
   TrendingUp, TrendingDown, AlertTriangle, Target, Bot, User,
   Check, X, Loader2, Lock, ChevronRight, ArrowUpRight, ArrowDownRight,
   Activity, BarChart3, Settings2, Cpu, Database, Zap, FileText,
+  LayoutDashboard, ListFilter, PiggyBank, Lightbulb, X as XIcon,
+  Search, Filter, MoreHorizontal, Plus, Play, RefreshCw, Bell,
 } from 'lucide-react'
 import { fmt, fmtMonth } from '@/lib/format'
 import {
   Treemap, ResponsiveContainer, Tooltip as RTooltip,
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar,
-  RadialBarChart, RadialBar, Cell, Area, AreaChart,
+  Area, AreaChart, XAxis, YAxis, CartesianGrid, Tooltip,
+  RadialBarChart, RadialBar, Cell, BarChart, Bar,
 } from 'recharts'
 import { toast } from 'sonner'
 
 type Tier = 'Viewer' | 'Editor' | 'Approver'
+type View = 'overview' | 'transactions' | 'budgets' | 'goals' | 'insights'
 
 type ChatMessage = {
   role: 'user' | 'assistant'
@@ -42,6 +44,7 @@ type Txn = {
   anomaly?: boolean
   recurring?: boolean
   source?: string
+  memo?: string | null
 }
 
 type BudgetItem = {
@@ -77,12 +80,51 @@ type GoalItem = {
   targetDate: string | null
 }
 
+type Anomaly = {
+  id: string
+  date: string
+  merchant: string
+  amountCents: number
+  category: string
+  color: string
+  score: number | null
+}
+
+type MoMDelta = {
+  category: string
+  color: string
+  thisMonthCents: number
+  lastMonthCents: number
+  percentChange: number
+  trend: 'up' | 'down' | 'flat'
+}
+
+type TopMerchant = {
+  merchant: string
+  category: string
+  color: string
+  cents: number
+  count: number
+}
+
+type Subscription = {
+  merchant: string
+  category: string
+  color: string
+  cents: number
+  monthsActive: number
+  monthlyAverageCents: number
+  lastDate: string
+}
+
 export default function Home() {
   // ─── State ────────────────────────────────────────────────────────────
+  const [view, setView] = useState<View>('overview')
   const [tier, setTier] = useState<Tier>('Editor')
   const [privacyMode, setPrivacyMode] = useState(false)
   const [seeded, setSeeded] = useState(false)
   const [seeding, setSeeding] = useState(false)
+  const [chatOpen, setChatOpen] = useState(true)
 
   // Chat
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -103,18 +145,23 @@ export default function Home() {
   const [totalSpend, setTotalSpend] = useState(0)
   const [totalIncome, setTotalIncome] = useState(0)
   const [budgets, setBudgets] = useState<BudgetItem[]>([])
-
-  // Goals + recs
   const [goals, setGoals] = useState<GoalItem[]>([])
   const [recs, setRecs] = useState<RecItem[]>([])
 
+  // Insights
+  const [anomalies, setAnomalies] = useState<Anomaly[]>([])
+  const [momDeltas, setMomDeltas] = useState<MoMDelta[]>([])
+  const [topMerchants, setTopMerchants] = useState<TopMerchant[]>([])
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
+
   // ─── Data loaders ─────────────────────────────────────────────────────
   const loadDashboard = useCallback(async () => {
-    const [txRes, budRes, goalRes, recRes] = await Promise.all([
+    const [txRes, budRes, goalRes, recRes, insRes] = await Promise.all([
       fetch('/api/transactions?range=6m'),
       fetch('/api/budget'),
       fetch('/api/goals'),
       fetch('/api/recommendations'),
+      fetch('/api/insights'),
     ])
     if (txRes.ok) {
       const d = await txRes.json()
@@ -136,6 +183,13 @@ export default function Home() {
       const d = await recRes.json()
       setRecs(d.recommendations)
     }
+    if (insRes.ok) {
+      const d = await insRes.json()
+      setAnomalies(d.anomalies)
+      setMomDeltas(d.monthOverMonth)
+      setTopMerchants(d.topMerchants)
+      setSubscriptions(d.recurringSubscriptions)
+    }
   }, [])
 
   const handleSeed = async () => {
@@ -144,7 +198,7 @@ export default function Home() {
       const res = await fetch('/api/seed', { method: 'POST' })
       const d = await res.json()
       if (d.ok) {
-        toast.success('FinWise dataset regenerated', {
+        toast.success('Dataset regenerated', {
           description: `${d.transactionCount} transactions · ${d.goalCount} goals · ${d.recommendationCount} recommendations`,
         })
         setSeeded(true)
@@ -159,12 +213,10 @@ export default function Home() {
     }
   }
 
-  // Auto-seed on first mount
   useEffect(() => {
     handleSeed()
   }, [])
 
-  // Refresh data when tier changes
   useEffect(() => {
     if (seeded) loadDashboard()
   }, [seeded, loadDashboard])
@@ -180,7 +232,6 @@ export default function Home() {
     ]
     setMessages(newMsgs)
     setChatLoading(true)
-
     setTimeout(() => {
       if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }, 50)
@@ -222,10 +273,10 @@ export default function Home() {
   }
 
   const quickPrompts = [
-    { label: 'Monthly review', text: 'How did this month go?', icon: BarChart3 },
-    { label: 'Spending anomaly', text: 'Why did I overspend this month?', icon: AlertTriangle },
-    { label: 'Run simulation', text: 'If I cut dining by 20%, when can I afford the Japan trip?', icon: Target },
-    { label: 'Cancel subscriptions', text: 'Which subscriptions should I cancel?', icon: Receipt },
+    { label: 'Monthly review', text: 'How did this month go?' },
+    { label: 'Spending anomaly', text: 'Why did I overspend this month?' },
+    { label: 'Run simulation', text: 'If I cut dining by 20%, when can I afford the Japan trip?' },
+    { label: 'Cancel subscriptions', text: 'Which subscriptions should I cancel?' },
   ]
 
   // ─── CSV upload ───────────────────────────────────────────────────────
@@ -239,9 +290,7 @@ export default function Home() {
       const res = await fetch('/api/transactions', { method: 'POST', body: fd })
       const d = await res.json()
       if (d.ok) {
-        toast.success(`Imported ${d.imported} transactions`, {
-          description: file.name,
-        })
+        toast.success(`Imported ${d.imported} transactions`, { description: file.name })
         await loadDashboard()
       } else {
         toast.error(d.error || 'Upload failed')
@@ -296,553 +345,307 @@ export default function Home() {
   const savingsRate = totalIncome > 0 ? Math.round((netSavings / totalIncome) * 100) : 0
   const totalPendingRecs = recs.filter(r => r.status === 'pending').reduce((s, r) => s + r.impactCents, 0)
   const overBudgetCount = budgets.filter(b => b.percentUsed > 100).length
+  const pendingRecCount = recs.filter(r => r.status === 'pending').length
+
+  const navItems: { id: View; label: string; icon: any; badge?: string }[] = [
+    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+    { id: 'transactions', label: 'Transactions', icon: ListFilter },
+    { id: 'budgets', label: 'Budgets', icon: Wallet, badge: overBudgetCount > 0 ? String(overBudgetCount) : undefined },
+    { id: 'goals', label: 'Goals', icon: PiggyBank },
+    { id: 'insights', label: 'Insights', icon: Lightbulb, badge: anomalies.length > 0 ? String(anomalies.length) : undefined },
+  ]
 
   // ─── Render ───────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen flex flex-col bg-[var(--fw-bg)] text-[var(--fw-text)]">
-      {/* ─── Top Navigation Bar ─────────────────────────────────────────── */}
+      {/* ─── Top Bar ──────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-40 border-b border-[var(--fw-border)] bg-[var(--fw-surface)]/95 backdrop-blur-md">
-        <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex h-14 items-center justify-between gap-4">
-            {/* Brand */}
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2.5">
-                <div className="h-8 w-8 rounded-lg bg-[var(--fw-text)] flex items-center justify-center shadow-sm">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="text-[var(--fw-surface)]">
-                    <path d="M4 4h16v3H4zM4 9h10v3H4zM4 14h16v3H4zM4 19h7v1H4z" fill="currentColor"/>
-                  </svg>
-                </div>
-                <div className="flex flex-col leading-none">
-                  <span className="text-[15px] font-semibold tracking-tight text-[var(--fw-text)]">
-                    FinWise
-                  </span>
-                  <span className="text-[10px] text-[var(--fw-text-3)] tracking-wide uppercase">
-                    Personal Finance Intelligence
-                  </span>
-                </div>
+        <div className="flex h-14 items-center justify-between gap-4 px-4 sm:px-6">
+          {/* Brand */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="h-8 w-8 rounded-lg bg-[var(--fw-text)] flex items-center justify-center shadow-sm">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="text-[var(--fw-surface)]">
+                  <path d="M4 4h16v3H4zM4 9h10v3H4zM4 14h16v3H4zM4 19h7v1H4z" fill="currentColor"/>
+                </svg>
               </div>
-
-              {/* Status pill */}
-              <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[var(--fw-surface-2)] border border-[var(--fw-border)]">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[11px] text-[var(--fw-text-2)] font-medium">Agent Online</span>
-              </div>
-            </div>
-
-            {/* Controls */}
-            <div className="flex items-center gap-2">
-              {/* Privacy */}
-              <button
-                onClick={() => setPrivacyMode(!privacyMode)}
-                className="flex items-center gap-2 px-3 h-8 rounded-md border border-[var(--fw-border)] bg-[var(--fw-surface)] hover:bg-[var(--fw-surface-2)] transition-colors fw-focus"
-                title="Toggle privacy mode"
-              >
-                {privacyMode ? (
-                  <Lock className="h-3.5 w-3.5 text-[var(--fw-accent)]" />
-                ) : (
-                  <Zap className="h-3.5 w-3.5 text-[var(--fw-text-3)]" />
-                )}
-                <span className="text-[11px] font-medium text-[var(--fw-text-2)] hidden sm:inline">
-                  {privacyMode ? 'Local Mode' : 'Cloud Mode'}
+              <div className="flex flex-col leading-none">
+                <span className="text-[15px] font-semibold tracking-tight">FinWise</span>
+                <span className="text-[9px] text-[var(--fw-text-3)] tracking-[0.15em] uppercase font-medium">
+                  Personal Finance Intelligence
                 </span>
-                <Switch checked={privacyMode} onCheckedChange={setPrivacyMode} className="scale-75 data-[state=checked]:bg-[var(--fw-accent)]" />
-              </button>
-
-              {/* Permission tier */}
-              <Select value={tier} onValueChange={(v) => setTier(v as Tier)}>
-                <SelectTrigger className="w-[110px] h-8 text-[11px] font-medium border-[var(--fw-border)] bg-[var(--fw-surface)]">
-                  <div className="flex items-center gap-1.5">
-                    {tier === 'Viewer' && <Shield className="h-3 w-3 text-[var(--fw-text-3)]" />}
-                    {tier === 'Editor' && <ShieldCheck className="h-3 w-3 text-[var(--fw-accent)]" />}
-                    {tier === 'Approver' && <ShieldAlert className="h-3 w-3 text-amber-500" />}
-                    <SelectValue />
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Viewer">
-                    <div className="flex items-center gap-2">
-                      <Shield className="h-3.5 w-3.5 text-[var(--fw-text-3)]" />
-                      <div className="flex flex-col">
-                        <span className="text-xs font-medium">Viewer</span>
-                        <span className="text-[10px] text-[var(--fw-text-3)]">Read-only</span>
-                      </div>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="Editor">
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="h-3.5 w-3.5 text-[var(--fw-accent)]" />
-                      <div className="flex flex-col">
-                        <span className="text-xs font-medium">Editor</span>
-                        <span className="text-[10px] text-[var(--fw-text-3)]">Modify budgets</span>
-                      </div>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="Approver">
-                    <div className="flex items-center gap-2">
-                      <ShieldAlert className="h-3.5 w-3.5 text-amber-500" />
-                      <div className="flex flex-col">
-                        <span className="text-xs font-medium">Approver</span>
-                        <span className="text-[10px] text-[var(--fw-text-3)]">Execute transfers</span>
-                      </div>
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-
-              {/* Reset */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSeed}
-                disabled={seeding}
-                className="h-8 text-[11px] font-medium border-[var(--fw-border)]"
-              >
-                {seeding ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Settings2 className="h-3.5 w-3.5" />
-                )}
-                <span className="hidden sm:inline ml-1.5">Reset</span>
-              </Button>
+              </div>
             </div>
+            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[var(--fw-surface-2)] border border-[var(--fw-border)] ml-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[11px] text-[var(--fw-text-2)] font-medium">Agent Online</span>
+            </div>
+          </div>
+
+          {/* Right controls */}
+          <div className="flex items-center gap-2">
+            {/* Notifications */}
+            <button className="hidden sm:flex relative h-8 w-8 items-center justify-center rounded-md border border-[var(--fw-border)] bg-[var(--fw-surface)] hover:bg-[var(--fw-surface-2)] transition-colors fw-focus">
+              <Bell className="h-3.5 w-3.5 text-[var(--fw-text-2)]" />
+              {pendingRecCount > 0 && (
+                <span className="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full bg-[var(--fw-accent)] text-[8px] font-bold text-white flex items-center justify-center">
+                  {pendingRecCount}
+                </span>
+              )}
+            </button>
+
+            {/* Privacy */}
+            <button
+              onClick={() => setPrivacyMode(!privacyMode)}
+              className="flex items-center gap-2 px-3 h-8 rounded-md border border-[var(--fw-border)] bg-[var(--fw-surface)] hover:bg-[var(--fw-surface-2)] transition-colors fw-focus"
+            >
+              {privacyMode ? (
+                <Lock className="h-3.5 w-3.5 text-[var(--fw-accent)]" />
+              ) : (
+                <Zap className="h-3.5 w-3.5 text-[var(--fw-text-3)]" />
+              )}
+              <span className="text-[11px] font-medium text-[var(--fw-text-2)] hidden sm:inline">
+                {privacyMode ? 'Local' : 'Cloud'}
+              </span>
+              <Switch checked={privacyMode} onCheckedChange={setPrivacyMode} className="scale-75 data-[state=checked]:bg-[var(--fw-accent)]" />
+            </button>
+
+            {/* Permission tier */}
+            <Select value={tier} onValueChange={(v) => setTier(v as Tier)}>
+              <SelectTrigger className="w-[110px] h-8 text-[11px] font-medium border-[var(--fw-border)] bg-[var(--fw-surface)]">
+                <div className="flex items-center gap-1.5">
+                  {tier === 'Viewer' && <Shield className="h-3 w-3 text-[var(--fw-text-3)]" />}
+                  {tier === 'Editor' && <ShieldCheck className="h-3 w-3 text-[var(--fw-accent)]" />}
+                  {tier === 'Approver' && <ShieldAlert className="h-3 w-3 text-amber-500" />}
+                  <SelectValue />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Viewer">
+                  <div className="flex items-center gap-2">
+                    <Shield className="h-3.5 w-3.5 text-[var(--fw-text-3)]" />
+                    <div className="flex flex-col">
+                      <span className="text-xs font-medium">Viewer</span>
+                      <span className="text-[10px] text-[var(--fw-text-3)]">Read-only</span>
+                    </div>
+                  </div>
+                </SelectItem>
+                <SelectItem value="Editor">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="h-3.5 w-3.5 text-[var(--fw-accent)]" />
+                    <div className="flex flex-col">
+                      <span className="text-xs font-medium">Editor</span>
+                      <span className="text-[10px] text-[var(--fw-text-3)]">Modify budgets</span>
+                    </div>
+                  </div>
+                </SelectItem>
+                <SelectItem value="Approver">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="h-3.5 w-3.5 text-amber-500" />
+                    <div className="flex flex-col">
+                      <span className="text-xs font-medium">Approver</span>
+                      <span className="text-[10px] text-[var(--fw-text-3)]">Execute transfers</span>
+                    </div>
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Reset */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSeed}
+              disabled={seeding}
+              className="h-8 text-[11px] font-medium border-[var(--fw-border)]"
+            >
+              {seeding ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
+              <span className="hidden sm:inline ml-1.5">Reset</span>
+            </Button>
           </div>
         </div>
       </header>
 
-      {/* ─── Main 3-Column Workspace ────────────────────────────────────── */}
-      <main className="flex-1 max-w-[1800px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-5">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-
-          {/* ═══ LEFT: Chat Panel (4 cols) ═══ */}
-          <section className="lg:col-span-4 xl:col-span-4">
-            <div className="lg:h-[calc(100vh-7.5rem)] lg:sticky lg:top-20 flex flex-col rounded-xl border border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-md)] overflow-hidden">
-              {/* Panel header */}
-              <div className="flex items-center justify-between px-4 h-12 border-b border-[var(--fw-border)] bg-[var(--fw-surface-2)]/50">
-                <div className="flex items-center gap-2">
-                  <div className="h-6 w-6 rounded-md bg-[var(--fw-text)] flex items-center justify-center">
-                    <Bot className="h-3.5 w-3.5 text-[var(--fw-surface)]" />
-                  </div>
-                  <div className="flex flex-col leading-none">
-                    <span className="text-xs font-semibold text-[var(--fw-text)]">FinWise Agent</span>
-                    <span className="text-[10px] text-[var(--fw-text-3)]">Supervisor-Worker · 7 tools</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className={`h-1.5 w-1.5 rounded-full ${privacyMode ? 'bg-[var(--fw-accent)]' : 'bg-emerald-500'}`} />
-                  <span className="text-[10px] font-medium text-[var(--fw-text-2)]">
-                    {privacyMode ? 'Local' : 'Cloud'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Messages */}
-              <div ref={scrollRef} className="flex-1 overflow-y-auto fw-scroll px-4 py-4">
-                <div className="space-y-5">
-                  {messages.map((m, i) => (
-                    <MessageBubble key={i} m={m} />
-                  ))}
-                  {chatLoading && (
-                    <div className="flex items-start gap-3">
-                      <div className="h-7 w-7 rounded-md bg-[var(--fw-text)] flex items-center justify-center flex-shrink-0">
-                        <Bot className="h-3.5 w-3.5 text-[var(--fw-surface)]" />
-                      </div>
-                      <div className="bg-[var(--fw-surface-2)] rounded-lg rounded-tl-sm px-3.5 py-2.5 flex items-center gap-2 border border-[var(--fw-border)]">
-                        <Loader2 className="h-3 w-3 animate-spin text-[var(--fw-text-3)]" />
-                        <span className="text-[11px] text-[var(--fw-text-2)]">Analyzing your data...</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Quick prompts */}
-              {messages.length <= 1 && (
-                <div className="px-4 py-3 border-t border-[var(--fw-border)] bg-[var(--fw-surface-2)]/30">
-                  <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-2">
-                    Suggested Prompts
-                  </div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {quickPrompts.map((p) => (
-                      <button
-                        key={p.label}
-                        onClick={() => sendChat(p.text)}
-                        className="flex items-start gap-1.5 text-left text-[11px] px-2.5 py-2 rounded-md bg-[var(--fw-surface)] hover:bg-[var(--fw-accent-soft)] border border-[var(--fw-border)] hover:border-[var(--fw-accent)] transition-all fw-focus"
-                      >
-                        <p.icon className="h-3 w-3 mt-0.5 text-[var(--fw-text-3)] flex-shrink-0" />
-                        <span className="text-[var(--fw-text-2)] leading-tight">{p.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Input */}
-              <div className="p-3 border-t border-[var(--fw-border)] bg-[var(--fw-surface)]">
-                <div className="flex gap-2 items-end">
-                  <Input
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault()
-                        sendChat()
-                      }
-                    }}
-                    placeholder="Ask FinWise about your finances..."
-                    className="flex-1 h-9 text-[13px] border-[var(--fw-border)] bg-[var(--fw-surface)] placeholder:text-[var(--fw-text-3)]"
-                    disabled={chatLoading}
-                  />
-                  <Button
-                    onClick={() => sendChat()}
-                    disabled={chatLoading || !input.trim()}
-                    size="sm"
-                    className="h-9 px-3 bg-[var(--fw-text)] hover:bg-[var(--fw-text-2)] text-[var(--fw-surface)]"
-                  >
-                    <Send className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
+      {/* ─── Body: Sidebar + Main + Chat ─────────────────────────────────── */}
+      <div className="flex-1 flex">
+        {/* ─── Sidebar ─────────────────────────────────────────────────── */}
+        <aside className="hidden lg:flex w-56 flex-shrink-0 border-r border-[var(--fw-border)] bg-[var(--fw-surface)] flex-col">
+          <nav className="flex-1 p-3 space-y-0.5">
+            <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold px-2 mb-2">
+              Workspace
             </div>
-          </section>
-
-          {/* ═══ CENTER: Dashboard (5 cols) ═══ */}
-          <section className="lg:col-span-5 xl:col-span-5 space-y-5">
-            {/* Hero KPI strip */}
-            <div>
-              <div className="flex items-baseline justify-between mb-3">
-                <div>
-                  <h1 className="text-xl font-semibold tracking-tight text-[var(--fw-text)]">Financial Overview</h1>
-                  <p className="text-xs text-[var(--fw-text-3)] mt-0.5">Last 6 months · {txns.length} transactions</p>
-                </div>
-                <Badge variant="outline" className="text-[10px] font-medium border-[var(--fw-border)] text-[var(--fw-text-2)]">
-                  <Activity className="h-2.5 w-2.5 mr-1" />
-                  Live
-                </Badge>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <KpiCard
-                  label="Income"
-                  value={fmt(totalIncome, { compact: true })}
-                  delta="+12.4%"
-                  deltaDirection="up"
-                  icon={<ArrowDownRight className="h-3 w-3" />}
-                />
-                <KpiCard
-                  label="Spend"
-                  value={fmt(totalSpend, { compact: true })}
-                  delta="+4.2%"
-                  deltaDirection="up"
-                  negative
-                  icon={<ArrowUpRight className="h-3 w-3" />}
-                />
-                <KpiCard
-                  label="Net Savings"
-                  value={fmt(netSavings, { sign: true, compact: true })}
-                  delta={`${savingsRate}% rate`}
-                  deltaDirection={netSavings >= 0 ? 'up' : 'down'}
-                  highlight
-                  icon={<TrendingUp className="h-3 w-3" />}
-                />
-              </div>
-            </div>
-
-            {/* Budget status */}
-            <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Wallet className="h-4 w-4 text-[var(--fw-text-2)]" />
-                  <h2 className="text-sm font-semibold text-[var(--fw-text)]">Budget Status</h2>
-                </div>
-                <div className="flex items-center gap-2">
-                  {overBudgetCount > 0 && (
-                    <Badge variant="outline" className="text-[10px] font-medium border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400">
-                      <AlertTriangle className="h-2.5 w-2.5 mr-1" />
-                      {overBudgetCount} over
-                    </Badge>
-                  )}
-                  <span className="text-[10px] text-[var(--fw-text-3)] font-medium">
-                    {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setView(item.id)}
+                className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[12px] font-medium transition-colors fw-focus ${
+                  view === item.id
+                    ? 'bg-[var(--fw-surface-2)] text-[var(--fw-text)] border border-[var(--fw-border)]'
+                    : 'text-[var(--fw-text-2)] hover:bg-[var(--fw-surface-2)] hover:text-[var(--fw-text)] border border-transparent'
+                }`}
+              >
+                <item.icon className={`h-4 w-4 ${view === item.id ? 'text-[var(--fw-accent)]' : 'text-[var(--fw-text-3)]'}`} />
+                <span className="flex-1 text-left">{item.label}</span>
+                {item.badge && (
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+                    {item.badge}
                   </span>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                {budgets.slice(0, 6).map((b) => (
-                  <BudgetRow key={b.id} b={b} tier={tier} onUpdate={() => loadDashboard()} />
-                ))}
-                {budgets.length === 0 && (
-                  <div className="text-center py-8">
-                    <Loader2 className="h-4 w-4 animate-spin mx-auto text-[var(--fw-text-3)]" />
-                  </div>
                 )}
-              </div>
-            </Card>
+              </button>
+            ))}
+          </nav>
 
-            {/* Spending treemap */}
-            <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-[var(--fw-text-2)]" />
-                  <h2 className="text-sm font-semibold text-[var(--fw-text)]">Spending by Category</h2>
-                </div>
-                <span className="text-[10px] text-[var(--fw-text-3)]">
-                  Total: <span className="font-mono tnum text-[var(--fw-text-2)] font-semibold">{fmt(byCategory.reduce((s, c) => s + c.cents, 0), { compact: true })}</span>
+          {/* Sidebar footer: System status mini */}
+          <div className="p-3 border-t border-[var(--fw-border)]">
+            <div className="flex items-center gap-2 mb-2">
+              <Cpu className="h-3 w-3 text-[var(--fw-text-3)]" />
+              <span className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold">
+                System
+              </span>
+            </div>
+            <div className="space-y-1 text-[10px]">
+              <div className="flex justify-between">
+                <span className="text-[var(--fw-text-3)]">Architecture</span>
+                <span className="font-mono text-[var(--fw-text-2)]">Supervisor-Worker</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--fw-text-3)]">Workers</span>
+                <span className="font-mono text-[var(--fw-text-2)]">4 active</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--fw-text-3)]">LLM</span>
+                <span className="font-mono text-[var(--fw-text-2)]">Z.ai Chat</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--fw-text-3)]">PII mode</span>
+                <span className={`font-mono ${privacyMode ? 'text-[var(--fw-accent)]' : 'text-[var(--fw-text-2)]'}`}>
+                  {privacyMode ? 'Scrubbed' : 'Standard'}
                 </span>
               </div>
-              <div className="h-60 -mx-2">
-                {byCategory.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <Treemap
-                      data={byCategory.map(c => ({
-                        name: c.name,
-                        size: c.cents,
-                        color: c.color,
-                      }))}
-                      dataKey="size"
-                      stroke="#fff"
-                      content={<TreemapContent />}
-                    >
-                      <RTooltip
-                        formatter={(value: any) => typeof value === 'number' && !isNaN(value) ? fmt(value) : ''}
-                        contentStyle={{
-                          fontSize: '11px',
-                          borderRadius: '6px',
-                          padding: '6px 10px',
-                          border: '1px solid var(--fw-border)',
-                          background: 'var(--fw-surface)',
-                          color: 'var(--fw-text)',
-                        }}
-                      />
-                    </Treemap>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex items-center justify-center">
-                    <Loader2 className="h-4 w-4 animate-spin text-[var(--fw-text-3)]" />
-                  </div>
-                )}
+              <div className="flex justify-between">
+                <span className="text-[var(--fw-text-3)]">Latency</span>
+                <span className="font-mono text-[var(--fw-text-2)]">~1.5s</span>
               </div>
-            </Card>
+            </div>
+          </div>
+        </aside>
 
-            {/* Monthly trend */}
-            <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-[var(--fw-text-2)]" />
-                  <h2 className="text-sm font-semibold text-[var(--fw-text)]">Monthly Trend</h2>
-                </div>
-                <div className="flex gap-3 text-[10px]">
-                  <span className="flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-sm bg-[var(--fw-positive)]" />
-                    <span className="text-[var(--fw-text-2)] font-medium">Income</span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-sm bg-[var(--fw-negative)]" />
-                    <span className="text-[var(--fw-text-2)] font-medium">Spend</span>
-                  </span>
-                </div>
-              </div>
-              <div className="h-44 -mx-2">
-                {byMonth.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={byMonth.map(m => ({ ...m, label: fmtMonth(m.month) }))}>
-                      <defs>
-                        <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#15803d" stopOpacity={0.2} />
-                          <stop offset="100%" stopColor="#15803d" stopOpacity={0} />
-                        </linearGradient>
-                        <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#b91c1c" stopOpacity={0.15} />
-                          <stop offset="100%" stopColor="#b91c1c" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--fw-border)" strokeOpacity={0.6} vertical={false} />
-                      <XAxis
-                        dataKey="label"
-                        tick={{ fontSize: 10, fill: 'var(--fw-text-3)' }}
-                        stroke="var(--fw-border)"
-                        tickLine={false}
-                        axisLine={false}
-                      />
-                      <YAxis
-                        tick={{ fontSize: 10, fill: 'var(--fw-text-3)' }}
-                        tickLine={false}
-                        axisLine={false}
-                        tickFormatter={(v) => fmt(v, { compact: true })}
-                      />
-                      <Tooltip
-                        formatter={(value: any) => typeof value === 'number' && !isNaN(value) ? fmt(value) : ''}
-                        contentStyle={{
-                          fontSize: '11px',
-                          borderRadius: '6px',
-                          padding: '6px 10px',
-                          border: '1px solid var(--fw-border)',
-                          background: 'var(--fw-surface)',
-                        }}
-                      />
-                      <Area type="monotone" dataKey="incomeCents" stroke="#15803d" strokeWidth={1.5} fill="url(#incomeGrad)" name="Income" />
-                      <Area type="monotone" dataKey="spendCents" stroke="#b91c1c" strokeWidth={1.5} fill="url(#spendGrad)" name="Spend" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex items-center justify-center">
-                    <Loader2 className="h-4 w-4 animate-spin text-[var(--fw-text-3)]" />
-                  </div>
-                )}
-              </div>
-            </Card>
+        {/* ─── Main Content ────────────────────────────────────────────── */}
+        <main className="flex-1 min-w-0 overflow-x-hidden">
+          {view === 'overview' && (
+            <OverviewView
+              txns={txns}
+              byCategory={byCategory}
+              byMonth={byMonth}
+              totalSpend={totalSpend}
+              totalIncome={totalIncome}
+              netSavings={netSavings}
+              savingsRate={savingsRate}
+              budgets={budgets}
+              overBudgetCount={overBudgetCount}
+              goals={goals}
+              recs={recs}
+              totalPendingRecs={totalPendingRecs}
+              tier={tier}
+              onUpdateRec={updateRec}
+              onRefresh={loadDashboard}
+              fileInputRef={fileInputRef}
+              receiptInputRef={receiptInputRef}
+              onCsvUpload={handleCsvUpload}
+              onReceiptUpload={handleReceipt}
+            />
+          )}
+          {view === 'transactions' && (
+            <TransactionsView txns={txns} byCategory={byCategory} />
+          )}
+          {view === 'budgets' && (
+            <BudgetsView budgets={budgets} tier={tier} onUpdate={loadDashboard} />
+          )}
+          {view === 'goals' && (
+            <GoalsView goals={goals} onRefresh={loadDashboard} />
+          )}
+          {view === 'insights' && (
+            <InsightsView
+              anomalies={anomalies}
+              momDeltas={momDeltas}
+              topMerchants={topMerchants}
+              subscriptions={subscriptions}
+              recs={recs}
+              tier={tier}
+              onUpdateRec={updateRec}
+            />
+          )}
+        </main>
 
-            {/* Recent transactions */}
-            <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Receipt className="h-4 w-4 text-[var(--fw-text-2)]" />
-                  <h2 className="text-sm font-semibold text-[var(--fw-text)]">Recent Transactions</h2>
-                </div>
-                <div className="flex gap-1.5">
-                  <input
-                    ref={receiptInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleReceipt}
-                    className="hidden"
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-[11px] font-medium border-[var(--fw-border)]"
-                    onClick={() => receiptInputRef.current?.click()}
-                  >
-                    <Receipt className="h-3 w-3 mr-1" /> OCR
-                  </Button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".csv"
-                    onChange={handleCsvUpload}
-                    className="hidden"
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-[11px] font-medium border-[var(--fw-border)]"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <Upload className="h-3 w-3 mr-1" /> CSV
-                  </Button>
-                </div>
-              </div>
-              <div className="max-h-80 overflow-y-auto fw-scroll -mx-2">
-                <div className="space-y-0.5 px-2">
-                  {txns.slice(0, 30).map((t) => (
-                    <TxnRow key={t.id} t={t} />
-                  ))}
-                  {txns.length === 0 && (
-                    <div className="text-center py-8">
-                      <Loader2 className="h-4 w-4 animate-spin mx-auto text-[var(--fw-text-3)]" />
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Card>
-          </section>
+        {/* ─── Chat Slide-over Panel ──────────────────────────────────── */}
+        {chatOpen && (
+          <aside className="hidden xl:flex w-[380px] flex-shrink-0 border-l border-[var(--fw-border)] bg-[var(--fw-surface)] flex-col">
+            <ChatPanel
+              messages={messages}
+              input={input}
+              setInput={setInput}
+              chatLoading={chatLoading}
+              sendChat={sendChat}
+              scrollRef={scrollRef}
+              quickPrompts={quickPrompts}
+              privacyMode={privacyMode}
+              onClose={() => setChatOpen(false)}
+            />
+          </aside>
+        )}
+      </div>
 
-          {/* ═══ RIGHT: Goals + Recs (3 cols) ═══ */}
-          <section className="lg:col-span-3 xl:col-span-3 space-y-5">
-            {/* Goals */}
-            <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Target className="h-4 w-4 text-[var(--fw-text-2)]" />
-                  <h2 className="text-sm font-semibold text-[var(--fw-text)]">Savings Goals</h2>
-                </div>
-                <Badge variant="outline" className="text-[10px] font-medium border-[var(--fw-border)] text-[var(--fw-text-2)]">
-                  {goals.length} active
-                </Badge>
-              </div>
-              <div className="space-y-4">
-                {goals.map((g) => (
-                  <GoalCard key={g.id} g={g} />
-                ))}
-                {goals.length === 0 && (
-                  <div className="text-center py-4">
-                    <Loader2 className="h-4 w-4 animate-spin mx-auto text-[var(--fw-text-3)]" />
-                  </div>
-                )}
-              </div>
-            </Card>
+      {/* Floating chat toggle (mobile + when closed) */}
+      {!chatOpen && (
+        <button
+          onClick={() => setChatOpen(true)}
+          className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full bg-[var(--fw-text)] text-[var(--fw-surface)] shadow-[var(--fw-shadow-lg)] flex items-center justify-center hover:scale-105 transition-transform"
+        >
+          <Bot className="h-5 w-5" />
+        </button>
+      )}
 
-            {/* Recommendations */}
-            <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-amber-500" />
-                  <h2 className="text-sm font-semibold text-[var(--fw-text)]">Recommendations</h2>
-                </div>
-                <Badge variant="outline" className="text-[10px] font-medium border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-400">
-                  +{fmt(totalPendingRecs, { compact: true })}/yr
-                </Badge>
-              </div>
-              <div className="max-h-96 overflow-y-auto fw-scroll -mx-2">
-                <div className="space-y-2 px-2">
-                  {recs.map((r) => (
-                    <RecCard key={r.id} r={r} tier={tier} onAction={updateRec} />
-                  ))}
-                  {recs.length === 0 && (
-                    <div className="text-center py-4">
-                      <Loader2 className="h-4 w-4 animate-spin mx-auto text-[var(--fw-text-3)]" />
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Card>
-
-            {/* System card */}
-            <Card className="p-4 bg-[var(--fw-surface-2)] border-[var(--fw-border)] shadow-[var(--fw-shadow-sm)]">
-              <div className="flex items-center gap-2 mb-3">
-                <Cpu className="h-3.5 w-3.5 text-[var(--fw-text-2)]" />
-                <span className="text-[11px] font-semibold text-[var(--fw-text)] uppercase tracking-wider">
-                  System Status
-                </span>
-              </div>
-              <div className="space-y-2 text-[11px]">
-                <SystemRow icon={Bot} label="Architecture" value="Supervisor-Worker" />
-                <SystemRow icon={Database} label="Workers" value="4 active" />
-                <SystemRow icon={Cpu} label="LLM" value="Z.ai Chat" />
-                <SystemRow icon={Lock} label="PII mode" value={privacyMode ? 'Scrubbed' : 'Standard'} highlight={privacyMode} />
-                <SystemRow icon={Shield} label="Permission" value={tier} highlight={tier !== 'Viewer'} />
-                <SystemRow icon={Activity} label="Latency" value="~1.5s" />
-              </div>
-            </Card>
-          </section>
+      {/* Mobile chat overlay */}
+      {chatOpen && (
+        <div className="xl:hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={() => setChatOpen(false)}>
+          <div className="absolute right-0 top-0 bottom-0 w-full max-w-md bg-[var(--fw-surface)] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <ChatPanel
+              messages={messages}
+              input={input}
+              setInput={setInput}
+              chatLoading={chatLoading}
+              sendChat={sendChat}
+              scrollRef={scrollRef}
+              quickPrompts={quickPrompts}
+              privacyMode={privacyMode}
+              onClose={() => setChatOpen(false)}
+            />
+          </div>
         </div>
-      </main>
+      )}
+
+      {/* Hidden file inputs */}
+      <input ref={fileInputRef} type="file" accept=".csv" onChange={handleCsvUpload} className="hidden" />
+      <input ref={receiptInputRef} type="file" accept="image/*" onChange={handleReceipt} className="hidden" />
 
       {/* ─── Footer ─────────────────────────────────────────────────────── */}
       <footer className="border-t border-[var(--fw-border)] bg-[var(--fw-surface)] mt-auto">
-        <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap items-center justify-between gap-3 text-[11px]">
+        <div className="px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 text-[11px]">
           <div className="flex items-center gap-3 text-[var(--fw-text-3)]">
             <span className="font-medium text-[var(--fw-text-2)]">FinWise</span>
-            <span>·</span>
-            <span>Personal Finance Intelligence</span>
             <span>·</span>
             <span>PBCSF International Track · Topic A</span>
           </div>
           <div className="flex items-center gap-3 text-[var(--fw-text-3)]">
-            <span className="flex items-center gap-1">
-              <Database className="h-3 w-3" />
-              SQLite · Prisma
-            </span>
+            <span className="flex items-center gap-1"><Database className="h-3 w-3" /> SQLite · Prisma</span>
             <span>·</span>
-            <span className="flex items-center gap-1">
-              <FileText className="h-3 w-3" />
-              4-layer architecture
-            </span>
+            <span className="flex items-center gap-1"><FileText className="h-3 w-3" /> 4-layer architecture</span>
             <span>·</span>
-            <span className="flex items-center gap-1">
-              <Shield className="h-3 w-3" />
-              GDPR · CCPA · PIPL
-            </span>
+            <span className="flex items-center gap-1"><Shield className="h-3 w-3" /> GDPR · CCPA · PIPL</span>
           </div>
         </div>
       </footer>
@@ -850,22 +653,940 @@ export default function Home() {
   )
 }
 
-// ─── Sub-components ──────────────────────────────────────────────────────
+// ═══ View: Overview ═══════════════════════════════════════════════════
+function OverviewView(props: {
+  txns: Txn[]
+  byCategory: { name: string; color: string; cents: number; count: number }[]
+  byMonth: { month: string; spendCents: number; incomeCents: number }[]
+  totalSpend: number
+  totalIncome: number
+  netSavings: number
+  savingsRate: number
+  budgets: BudgetItem[]
+  overBudgetCount: number
+  goals: GoalItem[]
+  recs: RecItem[]
+  totalPendingRecs: number
+  tier: Tier
+  onUpdateRec: (id: string, status: 'accepted' | 'dismissed') => void
+  onRefresh: () => void
+  fileInputRef: React.RefObject<HTMLInputElement>
+  receiptInputRef: React.RefObject<HTMLInputElement>
+  onCsvUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
+  onReceiptUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
+}) {
+  const { txns, byCategory, byMonth, totalSpend, totalIncome, netSavings, savingsRate,
+          budgets, overBudgetCount, goals, recs, totalPendingRecs, tier, onUpdateRec,
+          fileInputRef, receiptInputRef, onCsvUpload, onReceiptUpload } = props
+
+  return (
+    <div className="p-5 sm:p-6 lg:p-8 space-y-6 max-w-[1200px]">
+      {/* Page header */}
+      <div className="flex items-end justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
+          <p className="text-sm text-[var(--fw-text-3)] mt-1">
+            Last 6 months · {txns.length} transactions · {goals.length} active goals
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => receiptInputRef.current?.click()}>
+            <Receipt className="h-3.5 w-3.5 mr-1.5" /> Receipt OCR
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => fileInputRef.current?.click()}>
+            <Upload className="h-3.5 w-3.5 mr-1.5" /> Import CSV
+          </Button>
+        </div>
+      </div>
+
+      {/* KPI cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <KpiCard
+          label="Income"
+          value={fmt(totalIncome, { compact: true })}
+          delta="+12.4% vs avg"
+          deltaDirection="up"
+          icon={<ArrowDownRight className="h-3 w-3" />}
+        />
+        <KpiCard
+          label="Spend"
+          value={fmt(totalSpend, { compact: true })}
+          delta="+4.2% vs avg"
+          deltaDirection="up"
+          negative
+          icon={<ArrowUpRight className="h-3 w-3" />}
+        />
+        <KpiCard
+          label="Net Savings"
+          value={fmt(netSavings, { sign: true, compact: true })}
+          delta={`${savingsRate}% savings rate`}
+          deltaDirection={netSavings >= 0 ? 'up' : 'down'}
+          highlight
+          icon={<TrendingUp className="h-3 w-3" />}
+        />
+      </div>
+
+      {/* Charts row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Spending by category */}
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-[var(--fw-text-2)]" />
+              <h2 className="text-sm font-semibold">Spending by Category</h2>
+            </div>
+            <span className="text-[10px] text-[var(--fw-text-3)]">
+              Total: <span className="font-mono tnum text-[var(--fw-text-2)] font-semibold">
+                {fmt(byCategory.reduce((s, c) => s + c.cents, 0), { compact: true })}
+              </span>
+            </span>
+          </div>
+          <div className="h-56 -mx-2">
+            {byCategory.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <Treemap
+                  data={byCategory.map(c => ({ name: c.name, size: c.cents, color: c.color }))}
+                  dataKey="size"
+                  stroke="#fff"
+                  content={<TreemapContent />}
+                >
+                  <RTooltip
+                    formatter={(value: any) => typeof value === 'number' && !isNaN(value) ? fmt(value) : ''}
+                    contentStyle={{
+                      fontSize: '11px', borderRadius: '6px', padding: '6px 10px',
+                      border: '1px solid var(--fw-border)', background: 'var(--fw-surface)', color: 'var(--fw-text)',
+                    }}
+                  />
+                </Treemap>
+              </ResponsiveContainer>
+            ) : <Loading />}
+          </div>
+        </Card>
+
+        {/* Monthly trend */}
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Activity className="h-4 w-4 text-[var(--fw-text-2)]" />
+              <h2 className="text-sm font-semibold">Monthly Trend</h2>
+            </div>
+            <div className="flex gap-3 text-[10px]">
+              <span className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-sm bg-[var(--fw-positive)]" />
+                <span className="text-[var(--fw-text-2)] font-medium">Income</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-sm bg-[var(--fw-negative)]" />
+                <span className="text-[var(--fw-text-2)] font-medium">Spend</span>
+              </span>
+            </div>
+          </div>
+          <div className="h-56 -mx-2">
+            {byMonth.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={byMonth.map(m => ({ ...m, label: fmtMonth(m.month) }))}>
+                  <defs>
+                    <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#15803d" stopOpacity={0.2} />
+                      <stop offset="100%" stopColor="#15803d" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#b91c1c" stopOpacity={0.15} />
+                      <stop offset="100%" stopColor="#b91c1c" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--fw-border)" strokeOpacity={0.6} vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--fw-text-3)' }} stroke="var(--fw-border)" tickLine={false} axisLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: 'var(--fw-text-3)' }} tickLine={false} axisLine={false} tickFormatter={(v) => fmt(v, { compact: true })} />
+                  <Tooltip
+                    formatter={(value: any) => typeof value === 'number' && !isNaN(value) ? fmt(value) : ''}
+                    contentStyle={{ fontSize: '11px', borderRadius: '6px', padding: '6px 10px', border: '1px solid var(--fw-border)', background: 'var(--fw-surface)' }}
+                  />
+                  <Area type="monotone" dataKey="incomeCents" stroke="#15803d" strokeWidth={1.5} fill="url(#incomeGrad)" name="Income" />
+                  <Area type="monotone" dataKey="spendCents" stroke="#b91c1c" strokeWidth={1.5} fill="url(#spendGrad)" name="Spend" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : <Loading />}
+          </div>
+        </Card>
+      </div>
+
+      {/* Budget status + top recommendations */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <Card className="lg:col-span-2 p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Wallet className="h-4 w-4 text-[var(--fw-text-2)]" />
+              <h2 className="text-sm font-semibold">Budget Status</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              {overBudgetCount > 0 && (
+                <Badge variant="outline" className="text-[10px] font-medium border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400">
+                  <AlertTriangle className="h-2.5 w-2.5 mr-1" />
+                  {overBudgetCount} over
+                </Badge>
+              )}
+              <span className="text-[10px] text-[var(--fw-text-3)] font-medium">
+                {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              </span>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {budgets.slice(0, 6).map((b) => (
+              <BudgetRow key={b.id} b={b} tier={tier} onUpdate={() => props.onRefresh()} />
+            ))}
+            {budgets.length === 0 && <Loading />}
+          </div>
+        </Card>
+
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-amber-500" />
+              <h2 className="text-sm font-semibold">Top Recommendations</h2>
+            </div>
+            <Badge variant="outline" className="text-[10px] font-medium border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-400">
+              +{fmt(totalPendingRecs, { compact: true })}/yr
+            </Badge>
+          </div>
+          <div className="space-y-2">
+            {recs.filter(r => r.status === 'pending').slice(0, 3).map((r) => (
+              <RecCard key={r.id} r={r} tier={tier} onAction={onUpdateRec} />
+            ))}
+            {recs.length === 0 && <Loading />}
+          </div>
+        </Card>
+      </div>
+
+      {/* Goals mini-strip + Recent transactions */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+          <div className="flex items-center gap-2 mb-4">
+            <Target className="h-4 w-4 text-[var(--fw-text-2)]" />
+            <h2 className="text-sm font-semibold">Savings Goals</h2>
+          </div>
+          <div className="space-y-4">
+            {goals.slice(0, 3).map((g) => <GoalCard key={g.id} g={g} />)}
+            {goals.length === 0 && <Loading />}
+          </div>
+        </Card>
+
+        <Card className="lg:col-span-2 p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Receipt className="h-4 w-4 text-[var(--fw-text-2)]" />
+              <h2 className="text-sm font-semibold">Recent Transactions</h2>
+            </div>
+            <span className="text-[10px] text-[var(--fw-text-3)]">{txns.length} total</span>
+          </div>
+          <div className="max-h-80 overflow-y-auto fw-scroll -mx-2">
+            <div className="space-y-0.5 px-2">
+              {txns.slice(0, 25).map((t) => <TxnRow key={t.id} t={t} />)}
+              {txns.length === 0 && <Loading />}
+            </div>
+          </div>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+// ═══ View: Transactions ═══════════════════════════════════════════════
+function TransactionsView({ txns, byCategory }: {
+  txns: Txn[]
+  byCategory: { name: string; color: string; cents: number; count: number }[]
+}) {
+  const [search, setSearch] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
+
+  const filtered = txns.filter(t => {
+    if (categoryFilter !== 'all' && t.category.name !== categoryFilter) return false
+    if (search && !t.merchantRaw.toLowerCase().includes(search.toLowerCase())) return false
+    return true
+  })
+
+  const totalSpend = filtered.filter(t => t.direction === 'debit').reduce((s, t) => s + t.amountCents, 0)
+  const totalIncome = filtered.filter(t => t.direction === 'credit').reduce((s, t) => s + t.amountCents, 0)
+
+  return (
+    <div className="p-5 sm:p-6 lg:p-8 space-y-6 max-w-[1200px]">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Transactions</h1>
+        <p className="text-sm text-[var(--fw-text-3)] mt-1">
+          {filtered.length} of {txns.length} transactions · {fmt(totalSpend)} spend · {fmt(totalIncome)} income
+        </p>
+      </div>
+
+      {/* Filter bar */}
+      <Card className="p-3 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--fw-text-3)]" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search merchants..."
+              className="pl-8 h-9 text-[13px] border-[var(--fw-border)]"
+            />
+          </div>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-[160px] h-9 text-[12px] border-[var(--fw-border)]">
+              <div className="flex items-center gap-1.5">
+                <Filter className="h-3 w-3 text-[var(--fw-text-3)]" />
+                <SelectValue />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All categories</SelectItem>
+              {byCategory.map(c => (
+                <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {(search || categoryFilter !== 'all') && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 text-xs"
+              onClick={() => { setSearch(''); setCategoryFilter('all') }}
+            >
+              <X className="h-3.5 w-3.5 mr-1" /> Clear
+            </Button>
+          )}
+        </div>
+      </Card>
+
+      {/* Transactions table */}
+      <Card className="border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-[12px]">
+            <thead>
+              <tr className="border-b border-[var(--fw-border)] bg-[var(--fw-surface-2)]/50">
+                <th className="text-left font-semibold text-[var(--fw-text-2)] px-4 py-2.5">Date</th>
+                <th className="text-left font-semibold text-[var(--fw-text-2)] px-4 py-2.5">Merchant</th>
+                <th className="text-left font-semibold text-[var(--fw-text-2)] px-4 py-2.5">Category</th>
+                <th className="text-left font-semibold text-[var(--fw-text-2)] px-4 py-2.5">Source</th>
+                <th className="text-right font-semibold text-[var(--fw-text-2)] px-4 py-2.5">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.slice(0, 50).map((t) => (
+                <tr key={t.id} className="border-b border-[var(--fw-border)] last:border-0 hover:bg-[var(--fw-surface-2)]/50 transition-colors">
+                  <td className="px-4 py-2.5 text-[var(--fw-text-2)] tnum whitespace-nowrap">
+                    {new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-6 rounded-md flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0" style={{ backgroundColor: t.category.color }}>
+                        {t.category.name.slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="font-medium text-[var(--fw-text)] truncate">{t.merchantRaw}</span>
+                        {t.anomaly && <AlertTriangle className="h-3 w-3 text-amber-500 flex-shrink-0" />}
+                        {t.recurring && <span className="text-[8px] font-medium uppercase tracking-wider px-1 py-0.5 rounded bg-[var(--fw-surface-2)] text-[var(--fw-text-3)] border border-[var(--fw-border)]">Recurring</span>}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <span className="inline-flex items-center gap-1.5 text-[var(--fw-text-2)]">
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: t.category.color }} />
+                      {t.category.name}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--fw-text-3)]">{t.source}</span>
+                  </td>
+                  <td className={`px-4 py-2.5 text-right tnum font-semibold whitespace-nowrap ${t.direction === 'credit' ? 'text-[var(--fw-positive)]' : 'text-[var(--fw-text)]'}`}>
+                    {t.direction === 'credit' ? '+' : '-'}{fmt(t.amountCents)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {filtered.length === 0 && (
+          <div className="py-16 text-center">
+            <Search className="h-8 w-8 text-[var(--fw-text-3)] mx-auto mb-3" />
+            <div className="text-sm font-medium text-[var(--fw-text-2)]">No transactions found</div>
+            <div className="text-xs text-[var(--fw-text-3)] mt-1">Try adjusting your search or filter</div>
+          </div>
+        )}
+        {filtered.length > 50 && (
+          <div className="px-4 py-2.5 border-t border-[var(--fw-border)] bg-[var(--fw-surface-2)]/30 text-[11px] text-[var(--fw-text-3)] text-center">
+            Showing 50 of {filtered.length} transactions
+          </div>
+        )}
+      </Card>
+    </div>
+  )
+}
+
+// ═══ View: Budgets ════════════════════════════════════════════════════
+function BudgetsView({ budgets, tier, onUpdate }: {
+  budgets: BudgetItem[]
+  tier: Tier
+  onUpdate: () => void
+}) {
+  const totalBudget = budgets.reduce((s, b) => s + b.budgetCents, 0)
+  const totalSpent = budgets.reduce((s, b) => s + b.spentCents, 0)
+  const totalRemaining = totalBudget - totalSpent
+  const pctUsed = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0
+
+  return (
+    <div className="p-5 sm:p-6 lg:p-8 space-y-6 max-w-[1200px]">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Budgets</h1>
+        <p className="text-sm text-[var(--fw-text-3)] mt-1">
+          {budgets.length} envelopes · {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+        </p>
+      </div>
+
+      {/* Summary card */}
+      <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">Total Allocated</div>
+            <div className="text-2xl font-semibold tnum">{fmt(totalBudget, { compact: true })}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">Total Spent</div>
+            <div className="text-2xl font-semibold tnum text-[var(--fw-negative)]">{fmt(totalSpent, { compact: true })}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">Remaining</div>
+            <div className={`text-2xl font-semibold tnum ${totalRemaining >= 0 ? 'text-[var(--fw-positive)]' : 'text-[var(--fw-negative)]'}`}>
+              {fmt(totalRemaining, { sign: true, compact: true })}
+            </div>
+          </div>
+        </div>
+        <div className="mt-4">
+          <div className="flex justify-between text-[11px] mb-1.5">
+            <span className="text-[var(--fw-text-2)] font-medium">{pctUsed}% of total budget used</span>
+            <span className="text-[var(--fw-text-3)] tnum">{fmt(totalSpent)} / {fmt(totalBudget)}</span>
+          </div>
+          <div className="h-2 bg-[var(--fw-surface-2)] rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${pctUsed > 100 ? 'bg-[var(--fw-negative)]' : 'bg-[var(--fw-accent)]'}`}
+              style={{ width: `${Math.min(100, pctUsed)}%` }}
+            />
+          </div>
+        </div>
+      </Card>
+
+      {/* Envelope grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {budgets.map((b) => <BudgetDetailCard key={b.id} b={b} tier={tier} onUpdate={onUpdate} />)}
+        {budgets.length === 0 && <Loading />}
+      </div>
+
+      {tier === 'Viewer' && (
+        <div className="text-[11px] text-[var(--fw-text-3)] flex items-center gap-1.5">
+          <Lock className="h-3 w-3" />
+          Viewer tier — budget modifications disabled
+        </div>
+      )}
+    </div>
+  )
+}
+
+function BudgetDetailCard({ b, tier, onUpdate }: { b: BudgetItem; tier: Tier; onUpdate: () => void }) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState((b.budgetCents / 100).toString())
+  const overBudget = b.percentUsed > 100
+  const nearLimit = b.percentUsed > 80 && !overBudget
+
+  const save = async () => {
+    const newVal = parseFloat(value)
+    if (isNaN(newVal) || tier === 'Viewer') { setEditing(false); return }
+    try {
+      await fetch('/api/budget', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categoryId: b.categoryId, amountCents: Math.round(newVal * 100) }),
+      })
+      toast.success(`Updated ${b.category} budget to $${newVal}`)
+      onUpdate()
+    } catch (err: any) {
+      toast.error(err.message)
+    }
+    setEditing(false)
+  }
+
+  return (
+    <Card className={`p-4 border shadow-[var(--fw-shadow-sm)] ${
+      overBudget ? 'border-red-200 bg-red-50/30 dark:border-red-900/40 dark:bg-red-950/10' : 'border-[var(--fw-border)] bg-[var(--fw-surface)]'
+    }`}>
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 rounded-md flex items-center justify-center" style={{ backgroundColor: b.color }}>
+            <Wallet className="h-4 w-4 text-white" />
+          </div>
+          <div>
+            <div className="text-sm font-semibold">{b.category}</div>
+            <div className="text-[10px] text-[var(--fw-text-3)] tnum">
+              {b.percentUsed}% used · {b.percentUsed > 100 ? `${fmt(b.spentCents - b.budgetCents)} over` : `${fmt(b.budgetCents - b.spentCents)} left`}
+            </div>
+          </div>
+        </div>
+        {tier !== 'Viewer' && (
+          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-[var(--fw-text-3)]" onClick={() => setEditing(!editing)}>
+            <ChevronRight className="h-3 w-3" />
+          </Button>
+        )}
+      </div>
+      <div className="space-y-2">
+        <div className="flex items-baseline justify-between">
+          <span className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold">Spent</span>
+          <span className="text-lg font-semibold tnum">{fmt(b.spentCents)}</span>
+        </div>
+        <div className="h-1.5 bg-[var(--fw-surface-2)] rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${overBudget ? 'bg-[var(--fw-negative)]' : nearLimit ? 'bg-amber-500' : 'bg-[var(--fw-positive)]'}`}
+            style={{ width: `${Math.min(100, b.percentUsed)}%` }}
+          />
+        </div>
+        <div className="flex items-baseline justify-between text-[11px]">
+          <span className="text-[var(--fw-text-3)]">Budget</span>
+          <span className="tnum text-[var(--fw-text-2)] font-medium">{fmt(b.budgetCents)}</span>
+        </div>
+      </div>
+      {editing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setEditing(false)}>
+          <div className="bg-[var(--fw-surface)] rounded-lg p-5 w-80 border border-[var(--fw-border)] shadow-[var(--fw-shadow-lg)]" onClick={(e) => e.stopPropagation()}>
+            <div className="text-sm font-semibold mb-1">Edit {b.category} budget</div>
+            <div className="text-[11px] text-[var(--fw-text-3)] mb-3">Set monthly envelope allocation</div>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--fw-text-3)] text-sm">$</span>
+              <Input value={value} onChange={(e) => setValue(e.target.value)} type="number" className="pl-7" autoFocus />
+            </div>
+            <div className="flex gap-2 mt-4">
+              <Button variant="outline" size="sm" className="flex-1" onClick={() => setEditing(false)}>Cancel</Button>
+              <Button size="sm" className="flex-1 bg-[var(--fw-text)] hover:bg-[var(--fw-text-2)] text-[var(--fw-surface)]" onClick={save}>Save</Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+// ═══ View: Goals ══════════════════════════════════════════════════════
+function GoalsView({ goals, onRefresh }: {
+  goals: GoalItem[]
+  onRefresh: () => void
+}) {
+  const [simulating, setSimulating] = useState<string | null>(null)
+  const [simResult, setSimResult] = useState<any>(null)
+
+  const runSim = async (goalId: string, additionalMonthlyCents = 0) => {
+    setSimulating(goalId)
+    try {
+      const res = await fetch('/api/simulation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ goalId, additionalMonthlyCents, trials: 1000 }),
+      })
+      const d = await res.json()
+      if (d.ok) {
+        setSimResult(d)
+        toast.success('Monte Carlo simulation complete', {
+          description: `Median: ${d.medianMonths} months · 80% CI: ${d.p10Months}-${d.p90Months}`,
+        })
+      } else {
+        toast.error(d.error || 'Simulation failed')
+      }
+    } catch (err: any) {
+      toast.error(err.message)
+    } finally {
+      setSimulating(null)
+    }
+  }
+
+  return (
+    <div className="p-5 sm:p-6 lg:p-8 space-y-6 max-w-[1200px]">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Savings Goals</h1>
+        <p className="text-sm text-[var(--fw-text-3)] mt-1">
+          {goals.length} active goals · Click "Run simulation" to project completion dates with Monte Carlo
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {goals.map((g) => (
+          <Card key={g.id} className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+            <div className="flex items-start gap-4 mb-4">
+              <div className="relative h-16 w-16 flex-shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadialBarChart
+                    innerRadius="72%"
+                    outerRadius="100%"
+                    data={[{ value: g.percentComplete, fill: g.percentComplete >= 80 ? '#15803d' : g.percentComplete >= 50 ? '#b45309' : '#0f766e' }]}
+                    startAngle={90}
+                    endAngle={-270}
+                  >
+                    <RadialBar background={{ fill: 'var(--fw-surface-2)' }} dataKey="value" cornerRadius={10} />
+                  </RadialBarChart>
+                </ResponsiveContainer>
+                <div className="absolute inset-0 flex items-center justify-center text-[11px] font-bold tnum">
+                  {g.percentComplete}%
+                </div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-base font-semibold">{g.name}</div>
+                <div className="text-[12px] text-[var(--fw-text-2)] tnum mt-0.5">
+                  {fmt(g.savedCents, { compact: true })} <span className="text-[var(--fw-text-3)]">of {fmt(g.targetCents, { compact: true })}</span>
+                </div>
+                <div className="text-[11px] text-[var(--fw-text-3)] mt-1">
+                  {fmt(g.remainingCents)} remaining · {fmt(g.monthlyContributionCents)}/mo contribution
+                </div>
+                {g.monthsToTarget !== null && (
+                  <div className="text-[11px] text-[var(--fw-text-3)] mt-0.5">
+                    Target: {g.monthsToTarget} months out
+                  </div>
+                )}
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full h-8 text-[11px] font-medium border-[var(--fw-border)]"
+              onClick={() => runSim(g.id)}
+              disabled={simulating === g.id}
+            >
+              {simulating === g.id ? (
+                <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Running 1000 trials...</>
+              ) : (
+                <><Play className="h-3.5 w-3.5 mr-1.5" /> Run Monte Carlo simulation</>
+              )}
+            </Button>
+          </Card>
+        ))}
+        {goals.length === 0 && <Loading />}
+      </div>
+
+      {/* Simulation results */}
+      {simResult && (
+        <Card className="p-5 border-[var(--fw-accent)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-md)]">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Activity className="h-4 w-4 text-[var(--fw-accent)]" />
+              <h2 className="text-sm font-semibold">Simulation Result · {simResult.goalName}</h2>
+            </div>
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setSimResult(null)}>
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">Median</div>
+              <div className="text-xl font-semibold tnum text-[var(--fw-accent)]">{simResult.medianMonths} mo</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">80% CI</div>
+              <div className="text-xl font-semibold tnum">{simResult.p10Months}-{simResult.p90Months}</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">Projected Date</div>
+              <div className="text-base font-semibold tnum">{simResult.projectedDate}</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1">Success Probability</div>
+              <div className="text-xl font-semibold tnum text-[var(--fw-positive)]">{simResult.successProbability}%</div>
+            </div>
+          </div>
+          <div>
+            <div className="text-[11px] font-semibold text-[var(--fw-text-2)] mb-2 uppercase tracking-wider">Sensitivity scenarios</div>
+            <div className="space-y-1.5">
+              {simResult.scenarios.map((s: any, i: number) => (
+                <div key={i} className="flex items-center justify-between text-[12px] py-1.5 px-2 rounded bg-[var(--fw-surface-2)]/50">
+                  <span className="text-[var(--fw-text-2)]">{s.label}</span>
+                  <div className="flex items-center gap-3">
+                    <span className="tnum text-[var(--fw-text-3)]">{s.newMonthlyCents >= 100000 ? fmt(s.newMonthlyCents, { compact: true }) : fmt(s.newMonthlyCents)}/mo</span>
+                    <span className="tnum font-medium text-[var(--fw-text)]">{s.baseMonths} mo</span>
+                    {s.daysSaved > 0 && (
+                      <span className="tnum text-[var(--fw-positive)] font-medium">-{s.daysSaved}d</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+// ═══ View: Insights ═══════════════════════════════════════════════════
+function InsightsView({ anomalies, momDeltas, topMerchants, subscriptions, recs, tier, onUpdateRec }: {
+  anomalies: Anomaly[]
+  momDeltas: MoMDelta[]
+  topMerchants: TopMerchant[]
+  subscriptions: Subscription[]
+  recs: RecItem[]
+  tier: Tier
+  onUpdateRec: (id: string, status: 'accepted' | 'dismissed') => void
+}) {
+  return (
+    <div className="p-5 sm:p-6 lg:p-8 space-y-6 max-w-[1200px]">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Insights</h1>
+        <p className="text-sm text-[var(--fw-text-3)] mt-1">
+          {anomalies.length} anomalies · {momDeltas.length} categories tracked · {subscriptions.length} recurring subscriptions
+        </p>
+      </div>
+
+      {/* Anomalies + MoM */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+          <div className="flex items-center gap-2 mb-4">
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            <h2 className="text-sm font-semibold">Anomaly Detection</h2>
+            <Badge variant="outline" className="text-[10px] ml-auto">{anomalies.length} flagged</Badge>
+          </div>
+          <div className="space-y-2">
+            {anomalies.length === 0 ? (
+              <div className="text-center py-8 text-[var(--fw-text-3)] text-xs">No anomalies detected</div>
+            ) : (
+              anomalies.map((a) => (
+                <div key={a.id} className="flex items-center gap-3 p-2 rounded-md bg-amber-50/50 dark:bg-amber-950/10 border border-amber-200 dark:border-amber-900/40">
+                  <div className="h-8 w-8 rounded-md flex items-center justify-center flex-shrink-0" style={{ backgroundColor: a.color }}>
+                    <AlertTriangle className="h-4 w-4 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12px] font-medium">{a.merchant}</div>
+                    <div className="text-[10px] text-[var(--fw-text-3)]">
+                      {a.category} · {new Date(a.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[12px] font-semibold tnum">{fmt(a.amountCents)}</div>
+                    {a.score && <div className="text-[9px] text-amber-600 dark:text-amber-400 font-mono">score: {a.score.toFixed(2)}</div>}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </Card>
+
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart3 className="h-4 w-4 text-[var(--fw-text-2)]" />
+            <h2 className="text-sm font-semibold">Month-over-Month Changes</h2>
+          </div>
+          <div className="space-y-2">
+            {momDeltas.slice(0, 8).map((d, i) => (
+              <div key={i} className="flex items-center gap-3 py-1.5">
+                <div className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: d.color }} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12px] font-medium">{d.category}</div>
+                  <div className="text-[10px] text-[var(--fw-text-3)] tnum">
+                    {fmt(d.thisMonthCents, { compact: true })} vs {fmt(d.lastMonthCents, { compact: true })} last mo
+                  </div>
+                </div>
+                <div className={`flex items-center gap-1 text-[12px] font-semibold tnum ${
+                  d.trend === 'up' ? 'text-[var(--fw-negative)]' : d.trend === 'down' ? 'text-[var(--fw-positive)]' : 'text-[var(--fw-text-3)]'
+                }`}>
+                  {d.trend === 'up' && <TrendingUp className="h-3 w-3" />}
+                  {d.trend === 'down' && <TrendingDown className="h-3 w-3" />}
+                  {d.percentChange > 0 ? '+' : ''}{d.percentChange}%
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+
+      {/* Top merchants + subscriptions */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingUp className="h-4 w-4 text-[var(--fw-text-2)]" />
+            <h2 className="text-sm font-semibold">Top Merchants (3 months)</h2>
+          </div>
+          <div className="h-64 -mx-2">
+            {topMerchants.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={topMerchants} layout="vertical" margin={{ left: 90, right: 10, top: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--fw-border)" strokeOpacity={0.6} horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--fw-text-3)' }} tickLine={false} axisLine={false} tickFormatter={(v) => fmt(v, { compact: true })} />
+                  <YAxis type="category" dataKey="merchant" tick={{ fontSize: 10, fill: 'var(--fw-text-2)' }} tickLine={false} axisLine={false} width={85} />
+                  <Tooltip
+                    formatter={(value: any) => typeof value === 'number' && !isNaN(value) ? fmt(value) : ''}
+                    contentStyle={{ fontSize: '11px', borderRadius: '6px', padding: '6px 10px', border: '1px solid var(--fw-border)', background: 'var(--fw-surface)' }}
+                  />
+                  <Bar dataKey="cents" radius={[0, 4, 4, 0]}>
+                    {topMerchants.map((m, i) => <Cell key={i} fill={m.color} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : <Loading />}
+          </div>
+        </Card>
+
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+          <div className="flex items-center gap-2 mb-4">
+            <RefreshCw className="h-4 w-4 text-[var(--fw-text-2)]" />
+            <h2 className="text-sm font-semibold">Recurring Subscriptions</h2>
+          </div>
+          <div className="space-y-1.5">
+            {subscriptions.map((s, i) => (
+              <div key={i} className="flex items-center gap-3 py-1.5 px-2 rounded hover:bg-[var(--fw-surface-2)]/50">
+                <div className="h-7 w-7 rounded-md flex items-center justify-center flex-shrink-0" style={{ backgroundColor: s.color }}>
+                  <RefreshCw className="h-3.5 w-3.5 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12px] font-medium truncate">{s.merchant}</div>
+                  <div className="text-[10px] text-[var(--fw-text-3)]">
+                    {s.category} · {s.monthsActive} mo active
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[12px] font-semibold tnum">{fmt(s.monthlyAverageCents)}/mo</div>
+                  <div className="text-[9px] text-[var(--fw-text-3)] tnum">{fmt(s.cents)} total</div>
+                </div>
+              </div>
+            ))}
+            {subscriptions.length === 0 && <Loading />}
+          </div>
+        </Card>
+      </div>
+
+      {/* Recommendations */}
+      <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)]">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-amber-500" />
+            <h2 className="text-sm font-semibold">Recommendations</h2>
+          </div>
+          <Badge variant="outline" className="text-[10px] font-medium border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-400">
+            +{fmt(recs.filter(r => r.status === 'pending').reduce((s, r) => s + r.impactCents, 0))}/yr potential
+          </Badge>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {recs.map((r) => <RecCard key={r.id} r={r} tier={tier} onAction={onUpdateRec} />)}
+          {recs.length === 0 && <Loading />}
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+// ═══ Chat Panel ═══════════════════════════════════════════════════════
+function ChatPanel(props: {
+  messages: ChatMessage[]
+  input: string
+  setInput: (s: string) => void
+  chatLoading: boolean
+  sendChat: (text?: string) => void
+  scrollRef: React.RefObject<HTMLDivElement>
+  quickPrompts: { label: string; text: string }[]
+  privacyMode: boolean
+  onClose: () => void
+}) {
+  const { messages, input, setInput, chatLoading, sendChat, scrollRef, quickPrompts, privacyMode, onClose } = props
+  return (
+    <>
+      <div className="flex items-center justify-between px-4 h-12 border-b border-[var(--fw-border)] bg-[var(--fw-surface-2)]/50 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="h-6 w-6 rounded-md bg-[var(--fw-text)] flex items-center justify-center">
+            <Bot className="h-3.5 w-3.5 text-[var(--fw-surface)]" />
+          </div>
+          <div className="flex flex-col leading-none">
+            <span className="text-xs font-semibold">FinWise Agent</span>
+            <span className="text-[10px] text-[var(--fw-text-3)]">Supervisor-Worker · 7 tools</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className={`h-1.5 w-1.5 rounded-full ${privacyMode ? 'bg-[var(--fw-accent)]' : 'bg-emerald-500'}`} />
+          <span className="text-[10px] font-medium text-[var(--fw-text-2)] mr-1.5">{privacyMode ? 'Local' : 'Cloud'}</span>
+          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onClose}>
+            <XIcon className="h-3.5 w-3.5 text-[var(--fw-text-3)]" />
+          </Button>
+        </div>
+      </div>
+
+      <div ref={scrollRef} className="flex-1 overflow-y-auto fw-scroll px-4 py-4 min-h-0">
+        <div className="space-y-5">
+          {messages.map((m, i) => <MessageBubble key={i} m={m} />)}
+          {chatLoading && (
+            <div className="flex items-start gap-3">
+              <div className="h-7 w-7 rounded-md bg-[var(--fw-text)] flex items-center justify-center flex-shrink-0">
+                <Bot className="h-3.5 w-3.5 text-[var(--fw-surface)]" />
+              </div>
+              <div className="bg-[var(--fw-surface-2)] rounded-lg rounded-tl-sm px-3.5 py-2.5 flex items-center gap-2 border border-[var(--fw-border)]">
+                <Loader2 className="h-3 w-3 animate-spin text-[var(--fw-text-3)]" />
+                <span className="text-[11px] text-[var(--fw-text-2)]">Analyzing your data...</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {messages.length <= 1 && (
+        <div className="px-4 py-3 border-t border-[var(--fw-border)] bg-[var(--fw-surface-2)]/30 flex-shrink-0">
+          <div className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-2">Suggested Prompts</div>
+          <div className="grid grid-cols-2 gap-1.5">
+            {quickPrompts.map((p) => (
+              <button
+                key={p.label}
+                onClick={() => sendChat(p.text)}
+                className="text-left text-[11px] px-2.5 py-2 rounded-md bg-[var(--fw-surface)] hover:bg-[var(--fw-accent-soft)] border border-[var(--fw-border)] hover:border-[var(--fw-accent)] transition-all fw-focus text-[var(--fw-text-2)] leading-tight"
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="p-3 border-t border-[var(--fw-border)] bg-[var(--fw-surface)] flex-shrink-0">
+        <div className="flex gap-2 items-end">
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                sendChat()
+              }
+            }}
+            placeholder="Ask FinWise..."
+            className="flex-1 h-9 text-[13px] border-[var(--fw-border)] bg-[var(--fw-surface)] placeholder:text-[var(--fw-text-3)]"
+            disabled={chatLoading}
+          />
+          <Button
+            onClick={() => sendChat()}
+            disabled={chatLoading || !input.trim()}
+            size="sm"
+            className="h-9 px-3 bg-[var(--fw-text)] hover:bg-[var(--fw-text-2)] text-[var(--fw-surface)]"
+          >
+            <Send className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ─── Shared sub-components ──────────────────────────────────────────────
+
+function Loading() {
+  return (
+    <div className="text-center py-8">
+      <Loader2 className="h-4 w-4 animate-spin mx-auto text-[var(--fw-text-3)]" />
+    </div>
+  )
+}
 
 function MessageBubble({ m }: { m: ChatMessage }) {
   const isUser = m.role === 'user'
   return (
     <div className={`flex items-start gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
       <div className={`h-7 w-7 rounded-md flex items-center justify-center flex-shrink-0 ${
-        isUser
-          ? 'bg-[var(--fw-surface-2)] border border-[var(--fw-border)]'
-          : 'bg-[var(--fw-text)]'
+        isUser ? 'bg-[var(--fw-surface-2)] border border-[var(--fw-border)]' : 'bg-[var(--fw-text)]'
       }`}>
-        {isUser ? (
-          <User className="h-3.5 w-3.5 text-[var(--fw-text-2)]" />
-        ) : (
-          <Bot className="h-3.5 w-3.5 text-[var(--fw-surface)]" />
-        )}
+        {isUser ? <User className="h-3.5 w-3.5 text-[var(--fw-text-2)]" /> : <Bot className="h-3.5 w-3.5 text-[var(--fw-surface)]" />}
       </div>
       <div className={`max-w-[88%] ${isUser ? 'text-right' : ''}`}>
         <div className={`inline-block text-[13px] leading-relaxed px-3.5 py-2.5 rounded-lg ${
@@ -901,13 +1622,12 @@ function FormattedContent({ content }: { content: string }) {
     <div className="text-left space-y-0.5">
       {lines.map((line, i) => {
         if (line.startsWith('## ')) {
-          return <div key={i} className="font-semibold text-[13px] mt-2 mb-1 text-[var(--fw-text)]">{line.slice(3)}</div>
+          return <div key={i} className="font-semibold text-[13px] mt-2 mb-1">{line.slice(3)}</div>
         }
         if (line.startsWith('**') && line.endsWith('**') && !line.includes('**', 2)) {
           return <div key={i} className="font-semibold mt-1">{line.slice(2, -2)}</div>
         }
         if (line.startsWith('- ')) {
-          // Inline **bold** support within bullet
           const parts = line.slice(2).split(/(\*\*[^*]+\*\*)/g)
           return (
             <div key={i} className="ml-3 flex gap-1.5">
@@ -927,7 +1647,6 @@ function FormattedContent({ content }: { content: string }) {
           return <div key={i} className="italic text-[var(--fw-text-3)] text-[11px] mt-1">{line.slice(1, -1)}</div>
         }
         if (line.trim() === '') return <div key={i} className="h-1.5" />
-        // Inline **bold** support within paragraph
         const parts = line.split(/(\*\*[^*]+\*\*)/g)
         return (
           <div key={i}>
@@ -955,22 +1674,16 @@ function KpiCard({ label, value, delta, deltaDirection, icon, negative, highligh
 }) {
   return (
     <Card className={`p-4 border shadow-[var(--fw-shadow-sm)] transition-shadow hover:shadow-[var(--fw-shadow-md)] ${
-      highlight
-        ? 'border-[var(--fw-text)] bg-[var(--fw-text)] text-[var(--fw-surface)]'
-        : 'border-[var(--fw-border)] bg-[var(--fw-surface)]'
+      highlight ? 'border-[var(--fw-text)] bg-[var(--fw-text)] text-[var(--fw-surface)]' : 'border-[var(--fw-border)] bg-[var(--fw-surface)]'
     }`}>
       <div className="flex items-center justify-between mb-2">
         <span className={`text-[10px] uppercase tracking-wider font-semibold ${highlight ? 'text-[var(--fw-surface)]/70' : 'text-[var(--fw-text-3)]'}`}>
           {label}
         </span>
-        <span className={highlight ? 'text-[var(--fw-surface)]/70' : 'text-[var(--fw-text-3)]'}>
-          {icon}
-        </span>
+        <span className={highlight ? 'text-[var(--fw-surface)]/70' : 'text-[var(--fw-text-3)]'}>{icon}</span>
       </div>
       <div className="flex items-baseline gap-2">
-        <span className={`text-xl font-semibold tnum tracking-tight ${highlight ? 'text-[var(--fw-surface)]' : 'text-[var(--fw-text)]'}`}>
-          {value}
-        </span>
+        <span className={`text-xl font-semibold tnum tracking-tight ${highlight ? 'text-[var(--fw-surface)]' : 'text-[var(--fw-text)]'}`}>{value}</span>
       </div>
       <div className="flex items-center gap-1 mt-1.5">
         {deltaDirection === 'up' ? (
@@ -978,9 +1691,7 @@ function KpiCard({ label, value, delta, deltaDirection, icon, negative, highligh
         ) : (
           <TrendingDown className={`h-3 w-3 ${highlight ? 'text-[var(--fw-surface)]/70' : 'text-[var(--fw-negative)]'}`} />
         )}
-        <span className={`text-[10px] font-medium ${highlight ? 'text-[var(--fw-surface)]/70' : 'text-[var(--fw-text-2)]'}`}>
-          {delta}
-        </span>
+        <span className={`text-[10px] font-medium ${highlight ? 'text-[var(--fw-surface)]/70' : 'text-[var(--fw-text-2)]'}`}>{delta}</span>
       </div>
     </Card>
   )
@@ -994,10 +1705,7 @@ function BudgetRow({ b, tier, onUpdate }: { b: BudgetItem; tier: Tier; onUpdate:
 
   const save = async () => {
     const newVal = parseFloat(value)
-    if (isNaN(newVal) || tier === 'Viewer') {
-      setEditing(false)
-      return
-    }
+    if (isNaN(newVal) || tier === 'Viewer') { setEditing(false); return }
     try {
       await fetch('/api/budget', {
         method: 'PATCH',
@@ -1017,61 +1725,41 @@ function BudgetRow({ b, tier, onUpdate }: { b: BudgetItem; tier: Tier; onUpdate:
       <div className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: b.color }} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between text-[12px] mb-1">
-          <span className="font-medium text-[var(--fw-text)]">{b.category}</span>
+          <span className="font-medium">{b.category}</span>
           <div className="flex items-baseline gap-1.5">
-            <span className={`tnum font-semibold ${overBudget ? 'text-[var(--fw-negative)]' : 'text-[var(--fw-text)]'}`}>
-              {fmt(b.spentCents)}
-            </span>
-            <span className="tnum text-[10px] text-[var(--fw-text-3)]">
-              / {fmt(b.budgetCents)}
-            </span>
+            <span className={`tnum font-semibold ${overBudget ? 'text-[var(--fw-negative)]' : ''}`}>{fmt(b.spentCents)}</span>
+            <span className="tnum text-[10px] text-[var(--fw-text-3)]">/ {fmt(b.budgetCents)}</span>
           </div>
         </div>
         <div className="h-1 bg-[var(--fw-surface-2)] rounded-full overflow-hidden">
           <div
-            className={`h-full rounded-full transition-all ${
-              overBudget ? 'bg-[var(--fw-negative)]' : nearLimit ? 'bg-amber-500' : 'bg-[var(--fw-positive)]'
-            }`}
+            className={`h-full rounded-full transition-all ${overBudget ? 'bg-[var(--fw-negative)]' : nearLimit ? 'bg-amber-500' : 'bg-[var(--fw-positive)]'}`}
             style={{ width: `${Math.min(100, b.percentUsed)}%` }}
           />
         </div>
         <div className="flex items-center justify-between mt-0.5">
-          <span className="text-[10px] text-[var(--fw-text-3)] tnum">
-            {b.percentUsed}% used
+          <span className="text-[10px] text-[var(--fw-text-3)] tnum">{b.percentUsed}% used</span>
+          <span className={`text-[10px] tnum font-medium ${overBudget ? 'text-[var(--fw-negative)]' : 'text-[var(--fw-text-3)]'}`}>
+            {overBudget ? `${fmt(b.remainingCents, { sign: true })} over` : `${fmt(b.remainingCents)} left`}
           </span>
-          {overBudget && (
-            <span className="text-[10px] text-[var(--fw-negative)] font-medium tnum">
-              {fmt(b.remainingCents, { sign: true })} over
-            </span>
-          )}
-          {!overBudget && (
-            <span className="text-[10px] text-[var(--fw-text-3)] tnum">
-              {fmt(b.remainingCents)} left
-            </span>
-          )}
         </div>
       </div>
       {tier !== 'Viewer' && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 text-[var(--fw-text-3)] hover:text-[var(--fw-text)] hover:bg-[var(--fw-surface-2)]"
-          onClick={() => setEditing(!editing)}
-        >
+        <Button variant="ghost" size="sm" className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 text-[var(--fw-text-3)] hover:bg-[var(--fw-surface-2)]" onClick={() => setEditing(!editing)}>
           <ChevronRight className="h-3 w-3" />
         </Button>
       )}
       {editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setEditing(false)}>
           <div className="bg-[var(--fw-surface)] rounded-lg p-5 w-80 border border-[var(--fw-border)] shadow-[var(--fw-shadow-lg)]" onClick={(e) => e.stopPropagation()}>
-            <div className="text-sm font-semibold mb-1 text-[var(--fw-text)]">Edit {b.category} budget</div>
+            <div className="text-sm font-semibold mb-1">Edit {b.category} budget</div>
             <div className="text-[11px] text-[var(--fw-text-3)] mb-3">Set monthly envelope allocation</div>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--fw-text-3)] text-sm">$</span>
               <Input value={value} onChange={(e) => setValue(e.target.value)} type="number" className="pl-7" autoFocus />
             </div>
             <div className="flex gap-2 mt-4">
-              <Button variant="outline" size="sm" className="flex-1 border-[var(--fw-border)]" onClick={() => setEditing(false)}>Cancel</Button>
+              <Button variant="outline" size="sm" className="flex-1" onClick={() => setEditing(false)}>Cancel</Button>
               <Button size="sm" className="flex-1 bg-[var(--fw-text)] hover:bg-[var(--fw-text-2)] text-[var(--fw-surface)]" onClick={save}>Save</Button>
             </div>
           </div>
@@ -1085,23 +1773,14 @@ function TxnRow({ t }: { t: Txn }) {
   const isCredit = t.direction === 'credit'
   return (
     <div className="flex items-center gap-3 py-1.5 px-2 rounded-md hover:bg-[var(--fw-surface-2)] transition-colors">
-      <div
-        className="h-7 w-7 rounded-md flex items-center justify-center flex-shrink-0 text-[9px] font-bold text-white"
-        style={{ backgroundColor: t.category.color }}
-      >
+      <div className="h-7 w-7 rounded-md flex items-center justify-center flex-shrink-0 text-[9px] font-bold text-white" style={{ backgroundColor: t.category.color }}>
         {t.category.name.slice(0, 2).toUpperCase()}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-          <span className="text-[12px] font-medium text-[var(--fw-text)] truncate">{t.merchantRaw}</span>
-          {t.anomaly && (
-            <AlertTriangle className="h-3 w-3 text-amber-500 flex-shrink-0" />
-          )}
-          {t.recurring && (
-            <span className="text-[8px] font-medium uppercase tracking-wider px-1 py-0.5 rounded bg-[var(--fw-surface-2)] text-[var(--fw-text-3)] border border-[var(--fw-border)]">
-              Recurring
-            </span>
-          )}
+          <span className="text-[12px] font-medium truncate">{t.merchantRaw}</span>
+          {t.anomaly && <AlertTriangle className="h-3 w-3 text-amber-500 flex-shrink-0" />}
+          {t.recurring && <span className="text-[8px] font-medium uppercase tracking-wider px-1 py-0.5 rounded bg-[var(--fw-surface-2)] text-[var(--fw-text-3)] border border-[var(--fw-border)]">Recurring</span>}
         </div>
         <div className="text-[10px] text-[var(--fw-text-3)]">
           {t.category.name} · {new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -1121,30 +1800,18 @@ function GoalCard({ g }: { g: GoalItem }) {
     <div className="flex items-center gap-3">
       <div className="relative h-12 w-12 flex-shrink-0">
         <ResponsiveContainer width="100%" height="100%">
-          <RadialBarChart
-            innerRadius="72%"
-            outerRadius="100%"
-            data={[{ value: pct, fill: color }]}
-            startAngle={90}
-            endAngle={-270}
-          >
+          <RadialBarChart innerRadius="72%" outerRadius="100%" data={[{ value: pct, fill: color }]} startAngle={90} endAngle={-270}>
             <RadialBar background={{ fill: 'var(--fw-surface-2)' }} dataKey="value" cornerRadius={10} />
           </RadialBarChart>
         </ResponsiveContainer>
-        <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold tnum text-[var(--fw-text)]">
-          {pct}%
-        </div>
+        <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold tnum">{pct}%</div>
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-[12px] font-semibold text-[var(--fw-text)] truncate">{g.name}</div>
+        <div className="text-[12px] font-semibold truncate">{g.name}</div>
         <div className="text-[10px] text-[var(--fw-text-2)] tnum mt-0.5">
           {fmt(g.savedCents, { compact: true })} <span className="text-[var(--fw-text-3)]">/ {fmt(g.targetCents, { compact: true })}</span>
         </div>
-        {g.monthsToTarget !== null && (
-          <div className="text-[10px] text-[var(--fw-text-3)] mt-0.5">
-            {g.monthsToTarget} months to target
-          </div>
-        )}
+        {g.monthsToTarget !== null && <div className="text-[10px] text-[var(--fw-text-3)] mt-0.5">{g.monthsToTarget} mo to target</div>}
       </div>
     </div>
   )
@@ -1166,100 +1833,43 @@ function RecCard({ r, tier, onAction }: {
         : 'border-[var(--fw-border)] bg-[var(--fw-surface)] hover:border-[var(--fw-text-3)]'
     }`}>
       <div className="flex items-start justify-between gap-2 mb-1.5">
-        <div className="font-semibold text-[var(--fw-text)] leading-tight text-[12px]">{r.title}</div>
+        <div className="font-semibold leading-tight text-[12px]">{r.title}</div>
         <span className={`text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0 ${
           r.confidence === 'high' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400' :
           r.confidence === 'medium' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400' :
           'bg-[var(--fw-surface-2)] text-[var(--fw-text-3)]'
-        }`}>
-          {r.confidence}
-        </span>
+        }`}>{r.confidence}</span>
       </div>
       <div className="text-[11px] text-[var(--fw-text-2)] mb-2 leading-relaxed">{r.detail}</div>
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-mono tnum font-semibold text-[var(--fw-positive)]">
-          +{fmt(r.impactCents)}/yr
-        </span>
+        <span className="text-[11px] font-mono tnum font-semibold text-[var(--fw-positive)]">+{fmt(r.impactCents)}/yr</span>
         {isPending && tier !== 'Viewer' && (
           <div className="flex gap-1">
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-6 w-6 p-0 text-[var(--fw-positive)] hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
-              onClick={() => onAction(r.id, 'accepted')}
-            >
+            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-[var(--fw-positive)] hover:bg-emerald-50 dark:hover:bg-emerald-950/30" onClick={() => onAction(r.id, 'accepted')}>
               <Check className="h-3.5 w-3.5" />
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-6 w-6 p-0 text-[var(--fw-text-3)] hover:bg-[var(--fw-surface-2)]"
-              onClick={() => onAction(r.id, 'dismissed')}
-            >
+            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-[var(--fw-text-3)] hover:bg-[var(--fw-surface-2)]" onClick={() => onAction(r.id, 'dismissed')}>
               <X className="h-3.5 w-3.5" />
             </Button>
           </div>
         )}
-        {isAccepted && (
-          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[var(--fw-positive)]">
-            <Check className="h-3 w-3" /> Accepted
-          </span>
-        )}
-        {isDismissed && (
-          <span className="text-[10px] text-[var(--fw-text-3)]">Dismissed</span>
-        )}
+        {isAccepted && <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[var(--fw-positive)]"><Check className="h-3 w-3" /> Accepted</span>}
+        {isDismissed && <span className="text-[10px] text-[var(--fw-text-3)]">Dismissed</span>}
       </div>
     </div>
   )
 }
 
-function SystemRow({ icon: Icon, label, value, highlight }: {
-  icon: React.ComponentType<{ className?: string }>; label: string; value: string; highlight?: boolean
-}) {
-  return (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-1.5 text-[var(--fw-text-3)]">
-        <Icon className="h-3 w-3" />
-        <span>{label}</span>
-      </div>
-      <span className={`font-mono tnum font-medium ${highlight ? 'text-[var(--fw-accent)]' : 'text-[var(--fw-text-2)]'}`}>
-        {value}
-      </span>
-    </div>
-  )
-}
-
-// Recharts custom treemap cell
 function TreemapContent(props: any) {
   const { x, y, width, height, name, color, size } = props
   if (width < 30 || height < 20) return null
   return (
     <g>
-      <rect
-        x={x}
-        y={y}
-        width={width}
-        height={height}
-        style={{ fill: color || '#94a3b8', stroke: '#fff', strokeWidth: 2 }}
-      />
+      <rect x={x} y={y} width={width} height={height} style={{ fill: color || '#94a3b8', stroke: '#fff', strokeWidth: 2 }} />
       {width > 60 && height > 30 && (
         <>
-          <text
-            x={x + 8}
-            y={y + 18}
-            fill="#fff"
-            fontSize={11}
-            fontWeight={600}
-          >
-            {name}
-          </text>
-          <text
-            x={x + 8}
-            y={y + 32}
-            fill="#fff"
-            fontSize={10}
-            opacity={0.9}
-          >
+          <text x={x + 8} y={y + 18} fill="#fff" fontSize={11} fontWeight={600}>{name}</text>
+          <text x={x + 8} y={y + 32} fill="#fff" fontSize={10} opacity={0.9}>
             {typeof size === 'number' && !isNaN(size) ? fmt(size, { compact: true }) : ''}
           </text>
         </>
