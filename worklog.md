@@ -666,3 +666,44 @@ Stage Summary:
 - Permission-aware: Viewer tier is blocked from all write operations.
 - Dashboard auto-refreshes when the agent modifies data, with toast notification.
 - Welcome message + quick prompts updated to surface the new write capability.
+
+---
+Task ID: 14
+Agent: Z.ai (main)
+Task: Redesign Financial Health Score section — fix cramped layout, improve visual hierarchy.
+
+Work Log:
+- Identified design issues with the Financial Health Score section:
+  1. Gauge was too small (44px) and disconnected from the breakdown
+  2. "COMPOSITE WEIGHTED METRIC" label was awkwardly placed in the header row
+  3. Subscore bars were thin (2px) and lacked visual richness
+  4. No visual distinction between subscores — all looked the same
+  5. No grade badge — "Fair" was just plain text under the number
+  6. Insight paragraph was squeezed between header and bars
+  7. Layout was cramped with 1:2 ratio grid
+
+- Redesigned the section with:
+  1. **Dedicated header bar** with gradient background, gradient icon badge, title + subtitle, and "AI-Powered" badge in top-right
+  2. **Larger gauge** (48px score, 192x192 container) with:
+     - "SCORE" label above the number
+     - "out of 100" below the number
+     - Grade badge (Excellent/Good/Fair/Needs Work/Critical) in a colored pill with Award icon
+  3. **Insight banner** with Info icon in a surface-2 background card
+  4. **2-column subscore grid** with rich cards containing:
+     - Color dot + label on left, status badge (Excellent/Fair/Needs work) on right
+     - Large 22px score number in semantic color (green/amber/red)
+     - Weight indicator on the right
+     - 1.5px progress bar with matching color
+     - Hover shadow effect
+  5. **Better grid ratio** — 4:8 (gauge:breakdown) instead of 1:2 for more breathing room
+  6. **Proper card structure** — overflow-hidden on outer card, separate header/body sections with border
+
+- Verified: section renders correctly with all subscores showing proper colors (green for Excellent, red for Needs work), gauge displays score 52 with "Needs Work" grade badge, insight banner shows contextual advice.
+
+Stage Summary:
+- Financial Health Score section completely redesigned with:
+  - Clean header bar with gradient + AI-Powered badge
+  - Larger gauge with score label, grade pill badge
+  - Insight banner in surface-2 card
+  - 2-column subscore card grid with status badges, large scores, weights, progress bars
+  - Better visual hierarchy and spacing

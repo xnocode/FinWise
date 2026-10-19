@@ -1987,14 +1987,31 @@ function AnalyticsView({ data, loading, onRefresh }: {
       </div>
 
       {/* ─── Hero: Financial Health Score ──────────────────────────── */}
-      <Card className="p-6 border-[var(--fw-border)] bg-gradient-to-br from-[var(--fw-accent-soft)] via-[var(--fw-surface)] to-[var(--fw-surface)] shadow-[var(--fw-shadow-md)] rounded-2xl">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-center">
-          {/* Score gauge */}
-          <div className="flex flex-col items-center">
-            <div className="relative h-44 w-44">
+      <Card className="overflow-hidden border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-md)] rounded-2xl">
+        {/* Header bar */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--fw-border)] bg-gradient-to-r from-[var(--fw-accent-soft)] to-transparent">
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[var(--fw-accent)] to-[var(--fw-accent-hover)] flex items-center justify-center shadow-[var(--fw-shadow-glow)]">
+              <Gauge className="h-4 w-4 text-white" />
+            </div>
+            <div>
+              <h2 className="text-[16px] font-semibold leading-tight">Financial Health Score</h2>
+              <div className="text-[10px] text-[var(--fw-text-3)] mt-0.5">Composite weighted metric across 5 factors</div>
+            </div>
+          </div>
+          <span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-[var(--fw-surface)] text-[var(--fw-accent)] border border-[var(--fw-accent-border)] uppercase tracking-wider">
+            AI-Powered
+          </span>
+        </div>
+
+        {/* Body — gauge + breakdown */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 p-6">
+          {/* Score gauge — 4 cols */}
+          <div className="lg:col-span-4 flex flex-col items-center justify-center">
+            <div className="relative h-48 w-48">
               <ResponsiveContainer width="100%" height="100%">
                 <RadialBarChart
-                  innerRadius="68%" outerRadius="100%"
+                  innerRadius="70%" outerRadius="100%"
                   data={[{ value: healthScore.score, fill: scoreColor }]}
                   startAngle={90} endAngle={90 - (healthScore.score / 100) * 360}
                 >
@@ -2002,43 +2019,70 @@ function AnalyticsView({ data, loading, onRefresh }: {
                 </RadialBarChart>
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <div className="text-[44px] font-bold tnum tracking-tight" style={{ color: scoreColor }}>
+                <div className="text-[10px] uppercase tracking-[0.15em] text-[var(--fw-text-3)] font-semibold mb-1">Score</div>
+                <div className="text-[48px] font-bold tnum tracking-tight leading-none" style={{ color: scoreColor }}>
                   {healthScore.score}
                 </div>
-                <div className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold">/ 100</div>
-                <div className="text-[12px] font-medium mt-1" style={{ color: scoreColor }}>{healthScore.grade}</div>
+                <div className="text-[11px] text-[var(--fw-text-3)] mt-1 tnum">out of 100</div>
+                <div className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold" style={{
+                  backgroundColor: `${scoreColor}20`,
+                  color: scoreColor,
+                  border: `1px solid ${scoreColor}40`,
+                }}>
+                  <Award className="h-3 w-3" />
+                  {healthScore.grade}
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Score breakdown */}
-          <div className="lg:col-span-2">
-            <div className="flex items-center gap-2 mb-1">
-              <Gauge className="h-4 w-4 text-[var(--fw-accent)]" />
-              <h2 className="text-[16px] font-semibold">Financial Health Score</h2>
-              <span className="ml-auto text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold">
-                Composite weighted metric
-              </span>
+          {/* Score breakdown — 8 cols */}
+          <div className="lg:col-span-8">
+            {/* Insight banner */}
+            <div className="mb-4 p-3 rounded-xl bg-[var(--fw-surface-2)] border border-[var(--fw-border)] flex items-start gap-2.5">
+              <Info className="h-4 w-4 text-[var(--fw-accent)] flex-shrink-0 mt-0.5" />
+              <p className="text-[12px] text-[var(--fw-text-2)] leading-relaxed">{healthScore.insight}</p>
             </div>
-            <p className="text-[12px] text-[var(--fw-text-2)] mb-4 leading-relaxed">{healthScore.insight}</p>
 
-            <div className="space-y-2.5">
-              {healthScore.subscores.map((s: any, i: number) => (
-                <div key={i} className="flex items-center gap-3">
-                  <div className="w-32 text-[12px] font-medium text-[var(--fw-text-2)]">{s.label}</div>
-                  <div className="flex-1 h-2 bg-[var(--fw-surface-2)] rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${s.value}%`,
-                        background: s.value >= 75 ? 'var(--fw-positive)' : s.value >= 50 ? 'var(--fw-warning)' : 'var(--fw-negative)',
-                      }}
-                    />
+            {/* Subscore grid — 2 columns */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {healthScore.subscores.map((s: any, i: number) => {
+                const color = s.value >= 75 ? 'var(--fw-positive)' : s.value >= 50 ? 'var(--fw-warning)' : 'var(--fw-negative)'
+                const bgColor = s.value >= 75 ? 'var(--fw-positive-soft)' : s.value >= 50 ? 'var(--fw-warning-soft)' : 'var(--fw-negative-soft)'
+                const borderColor = s.value >= 75 ? 'var(--fw-positive-border)' : s.value >= 50 ? 'var(--fw-warning-border)' : 'var(--fw-negative-border)'
+                const statusLabel = s.value >= 75 ? 'Excellent' : s.value >= 50 ? 'Fair' : 'Needs work'
+                return (
+                  <div
+                    key={i}
+                    className="p-3 rounded-xl border bg-[var(--fw-surface)] hover:shadow-[var(--fw-shadow-sm)] transition-shadow"
+                    style={{ borderColor: 'var(--fw-border)' }}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+                        <span className="text-[12px] font-medium text-[var(--fw-text-2)]">{s.label}</span>
+                      </div>
+                      <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{
+                        backgroundColor: bgColor,
+                        color: color,
+                        border: `1px solid ${borderColor}`,
+                      }}>
+                        {statusLabel}
+                      </span>
+                    </div>
+                    <div className="flex items-baseline justify-between mb-2">
+                      <span className="text-[22px] font-bold tnum" style={{ color: color }}>{s.value}</span>
+                      <span className="text-[10px] text-[var(--fw-text-3)] font-mono">weight {s.weight}%</span>
+                    </div>
+                    <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--fw-surface-2)' }}>
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{ width: `${s.value}%`, backgroundColor: color }}
+                      />
+                    </div>
                   </div>
-                  <div className="w-12 text-right text-[12px] font-mono tnum font-semibold">{s.value}</div>
-                  <div className="w-10 text-right text-[10px] text-[var(--fw-text-3)] font-mono">{s.weight}%</div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </div>
