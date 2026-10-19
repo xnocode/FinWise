@@ -3927,21 +3927,16 @@ function SettingsView({ data, loading, onRefresh, onUpdate, onSeed, tier, setTie
               <SelectTrigger className="h-9 text-[12px] border-[var(--fw-border)] bg-[var(--fw-surface-2)] rounded-lg">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-[300px]">
                 {(currencyInfo?.supportedCurrencies || [
-                  { code: 'USD', symbol: '$', name: 'US Dollar' },
-                  { code: 'EUR', symbol: '€', name: 'Euro' },
-                  { code: 'GBP', symbol: '£', name: 'British Pound' },
-                  { code: 'JPY', symbol: '¥', name: 'Japanese Yen' },
-                  { code: 'CNY', symbol: '¥', name: 'Chinese Yuan' },
-                  { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
+                  { code: 'USD', symbol: '$', name: 'US Dollar', rate: 1, decimals: 2 },
                 ]).map((c: any) => (
                   <SelectItem key={c.code} value={c.code}>
                     <div className="flex items-center justify-between w-full gap-3">
-                      <span>{c.symbol} {c.code} — {c.name}</span>
+                      <span className="truncate">{c.symbol} {c.code} — {c.name}</span>
                       {c.rate && c.code !== 'USD' && (
-                        <span className="text-[10px] text-[var(--fw-text-3)] font-mono ml-auto">
-                          1$={c.symbol}{c.rate.toFixed(c.code === 'JPY' || c.code === 'KRW' ? 0 : 2)}
+                        <span className="text-[10px] text-[var(--fw-text-3)] font-mono ml-auto flex-shrink-0">
+                          1$={c.symbol}{c.rate.toFixed(c.decimals === 0 ? 0 : 2)}
                         </span>
                       )}
                     </div>
@@ -3949,8 +3944,9 @@ function SettingsView({ data, loading, onRefresh, onUpdate, onSeed, tier, setTie
                 ))}
               </SelectContent>
             </Select>
-            <div className="text-[10px] text-[var(--fw-text-3)] mt-1.5">
-              All amounts across the app will auto-convert using live exchange rates
+            <div className="text-[10px] text-[var(--fw-text-3)] mt-1.5 flex items-center gap-1">
+              <Globe className="h-3 w-3" />
+              {currencyInfo?.totalCurrencies ? `${currencyInfo.totalCurrencies} world currencies · ` : ''}All amounts auto-convert using live exchange rates
             </div>
           </div>
           <div>
