@@ -22,7 +22,7 @@ import {
   Hourglass, GitBranch, Award, Settings, Moon, Sun, Globe,
   Sliders, Trash2, Palette, User as UserIcon, Shield as ShieldIcon,
 } from 'lucide-react'
-import { fmt, fmtMonth } from '@/lib/format'
+import { fmt, fmtMonth, fmtCurrency, setGlobalCurrency, type CurrencyConfig } from '@/lib/format'
 import {
   Treemap, ResponsiveContainer, Tooltip as RTooltip,
   Area, AreaChart, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -176,6 +176,15 @@ export default function Home() {
   const [settingsLoading, setSettingsLoading] = useState(false)
   const [darkMode, setDarkMode] = useState(false)
 
+  // Currency — live conversion
+  const [currencyConfig, setCurrencyConfig] = useState<CurrencyConfig | null>(null)
+  const [currencyInfo, setCurrencyInfo] = useState<any>(null)
+
+  // Helper: format cents using the selected currency (available to all views)
+  const fmtC = useCallback((cents: number, opts?: { sign?: boolean; compact?: boolean }) => {
+    return fmtCurrency(cents, currencyConfig, opts)
+  }, [currencyConfig])
+
   const loadDashboard = useCallback(async () => {
     const [txRes, budRes, goalRes, recRes, insRes] = await Promise.all([
       fetch('/api/transactions?range=6m'),
@@ -292,6 +301,23 @@ export default function Home() {
     }
   }, [])
 
+  const loadCurrency = useCallback(async () => {
+    try {
+      const res = await fetch('/api/currency')
+      const d = await res.json()
+      if (d.ok) {
+        setCurrencyInfo(d)
+        setCurrencyConfig({
+          currency: d.target,
+          rate: d.rate,
+          meta: d.meta,
+        })
+      }
+    } catch (err) {
+      console.error('Currency load failed:', err)
+    }
+  }, [])
+
   const updateSettings = useCallback(async (updates: any) => {
     try {
       const res = await fetch('/api/settings', {
@@ -310,6 +336,10 @@ export default function Home() {
             document.documentElement.classList.remove('dark')
           }
         }
+        // If currency changed, reload exchange rates
+        if (updates.currency !== undefined) {
+          await loadCurrency()
+        }
         toast.success('Settings updated')
         return true
       } else {
@@ -320,13 +350,16 @@ export default function Home() {
       toast.error(err.message)
       return false
     }
-  }, [])
+  }, [loadCurrency])
 
   useEffect(() => { if (seeded) loadDashboard() }, [seeded, loadDashboard])
   useEffect(() => { if (view === 'analytics' && !analytics) loadAnalytics() }, [view, analytics, loadAnalytics])
   useEffect(() => { if (view === 'planning' && !debtData) loadPlanning() }, [view, debtData, loadPlanning])
   useEffect(() => { if (view === 'innovation' && !innovationData) loadInnovation() }, [view, innovationData, loadInnovation])
   useEffect(() => { if (view === 'settings' && !settingsData) loadSettings() }, [view, settingsData, loadSettings])
+  useEffect(() => { if (seeded) loadCurrency() }, [seeded, loadCurrency])
+  // Sync global currency state — so every fmt() call across all components uses live conversion
+  useEffect(() => { setGlobalCurrency(currencyConfig) }, [currencyConfig])
 
   const sendChat = async (text?: string) => {
     const msg = (text ?? input).trim()
@@ -470,6 +503,15 @@ export default function Home() {
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--fw-positive)] fw-pulse" />
               <span className="text-[11px] text-[var(--fw-positive)] font-semibold">Live</span>
             </div>
+            {/* Currency indicator */}
+            {currencyConfig && currencyConfig.currency !== 'USD' && (
+              <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--fw-accent-soft)] border border-[var(--fw-accent-border)] ml-1">
+                <Globe className="h-3 w-3 text-[var(--fw-accent)]" />
+                <span className="text-[11px] text-[var(--fw-accent)] font-semibold">
+                  {currencyConfig.currency} · 1$ = {currencyConfig.meta.symbol}{currencyConfig.rate.toFixed(currencyConfig.meta.decimals === 0 ? 0 : 2)}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Right controls */}
@@ -695,6 +737,7 @@ export default function Home() {
               setTier={setTier}
               privacyMode={privacyMode}
               setPrivacyMode={setPrivacyMode}
+              currencyInfo={currencyInfo}
             />
           )}
         </main>
@@ -3705,7 +3748,7 @@ function InnovationView({ data, loading, onRefresh }: {
 }
 
 // ═══ View: Settings ═══════════════════════════════════════════════════
-function SettingsView({ data, loading, onRefresh, onUpdate, onSeed, tier, setTier, privacyMode, setPrivacyMode }: {
+function SettingsView({ data, loading, onRefresh, onUpdate, onSeed, tier, setTier, privacyMode, setPrivacyMode, currencyInfo }: {
   data: any
   loading: boolean
   onRefresh: () => void
@@ -3715,6 +3758,7 @@ function SettingsView({ data, loading, onRefresh, onUpdate, onSeed, tier, setTie
   setTier: (t: Tier) => void
   privacyMode: boolean
   setPrivacyMode: (v: boolean) => void
+  currencyInfo: any
 }) {
   const [localName, setLocalName] = useState<string | null>(null)
   const [confirmReset, setConfirmReset] = useState(false)
@@ -3863,23 +3907,51 @@ function SettingsView({ data, loading, onRefresh, onUpdate, onSeed, tier, setTie
         <div className="flex items-center gap-2 mb-4">
           <Globe className="h-4 w-4 text-[var(--fw-accent)]" />
           <h2 className="text-[14px] font-semibold">Localization</h2>
+          {currencyInfo && (
+            <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[var(--fw-positive-soft)] text-[var(--fw-positive)] border border-[var(--fw-positive-border)] uppercase tracking-wider flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--fw-positive)] fw-pulse" />
+              Live Rates
+            </span>
+          )}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Currency</label>
+            <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">
+              Currency {currencyInfo && currencyInfo.target !== 'USD' && (
+                <span className="text-[var(--fw-accent)] ml-1 normal-case tracking-normal">
+                  · 1 USD = {currencyInfo.meta.symbol}{currencyInfo.rate.toFixed(currencyInfo.meta.decimals === 0 ? 0 : 2)} {currencyInfo.target}
+                </span>
+              )}
+            </label>
             <Select value={s.currency || 'USD'} onValueChange={(v) => onUpdate({ currency: v })}>
               <SelectTrigger className="h-9 text-[12px] border-[var(--fw-border)] bg-[var(--fw-surface-2)] rounded-lg">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="USD">USD — US Dollar ($)</SelectItem>
-                <SelectItem value="EUR">EUR — Euro (€)</SelectItem>
-                <SelectItem value="GBP">GBP — British Pound (£)</SelectItem>
-                <SelectItem value="JPY">JPY — Japanese Yen (¥)</SelectItem>
-                <SelectItem value="CNY">CNY — Chinese Yuan (¥)</SelectItem>
-                <SelectItem value="INR">INR — Indian Rupee (₹)</SelectItem>
+                {(currencyInfo?.supportedCurrencies || [
+                  { code: 'USD', symbol: '$', name: 'US Dollar' },
+                  { code: 'EUR', symbol: '€', name: 'Euro' },
+                  { code: 'GBP', symbol: '£', name: 'British Pound' },
+                  { code: 'JPY', symbol: '¥', name: 'Japanese Yen' },
+                  { code: 'CNY', symbol: '¥', name: 'Chinese Yuan' },
+                  { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
+                ]).map((c: any) => (
+                  <SelectItem key={c.code} value={c.code}>
+                    <div className="flex items-center justify-between w-full gap-3">
+                      <span>{c.symbol} {c.code} — {c.name}</span>
+                      {c.rate && c.code !== 'USD' && (
+                        <span className="text-[10px] text-[var(--fw-text-3)] font-mono ml-auto">
+                          1$={c.symbol}{c.rate.toFixed(c.code === 'JPY' || c.code === 'KRW' ? 0 : 2)}
+                        </span>
+                      )}
+                    </div>
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
+            <div className="text-[10px] text-[var(--fw-text-3)] mt-1.5">
+              All amounts across the app will auto-convert using live exchange rates
+            </div>
           </div>
           <div>
             <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Date Format</label>
