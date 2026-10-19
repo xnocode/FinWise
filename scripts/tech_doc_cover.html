@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Inter:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    @page { size: 794px 1123px; margin: 0; }
+    :root {
+      --c-bg: #f5f5f6;
+      --c-accent: #1d6d95;
+      --c-text: #151617;
+      --c-muted: #72787c;
+      --c-mid: #45565f;
+      --c-surface: #e8ebed;
+    }
+    html, body { margin: 0; padding: 0; width: 794px; height: 1123px; background: var(--c-bg); color: var(--c-text); font-family: 'Inter', sans-serif; }
+    @media screen { html { height: auto; display: flex; justify-content: center; min-height: 100vh; background: #e8e8e8; } body { transform-origin: top center; scale: min(1, calc(100vw / 794), calc(100vh / 1123)); margin: 0 auto; box-shadow: 0 0 60px rgba(0,0,0,0.15); } }
+    .cover { width: 794px; height: 1123px; position: relative; box-sizing: border-box; overflow: hidden; }
+    .layer-bg { position: absolute; inset: 0; overflow: hidden; z-index: 1;
+      background-image: linear-gradient(to right, rgba(29,109,149,0.04) 1px, transparent 1px), linear-gradient(to bottom, rgba(29,109,149,0.04) 1px, transparent 1px);
+      background-size: 50px 50px; }
+    .layer-struct { position: absolute; inset: 0; z-index: 2; }
+    .anchor-line { position: absolute; left: 80px; top: 112px; bottom: 112px; width: 6px; background: var(--c-accent); }
+    .corner-mark-tl { position: absolute; top: 56px; left: 56px; width: 28px; height: 28px; border-top: 1.5px solid var(--c-mid); border-left: 1.5px solid var(--c-mid); }
+    .corner-mark-br { position: absolute; bottom: 56px; right: 56px; width: 28px; height: 28px; border-bottom: 1.5px solid var(--c-mid); border-right: 1.5px solid var(--c-mid); }
+    .layer-content { position: absolute; inset: 0; z-index: 3; }
+    .kicker { position: absolute; left: 145px; top: 168px; font-size: 11pt; font-weight: 400; letter-spacing: 3px; text-transform: uppercase; color: var(--c-accent); opacity: 0.9; }
+    .hero-title { position: absolute; left: 145px; top: 232px; font-family: 'Playfair Display', serif; font-size: 46pt; font-weight: 900; line-height: 1.1; color: var(--c-text); max-width: 560px; letter-spacing: -1px; }
+    .hero-title-accent { position: absolute; left: 145px; top: 408px; font-family: 'Playfair Display', serif; font-size: 46pt; font-weight: 900; line-height: 1.1; color: var(--c-accent); max-width: 560px; letter-spacing: -1px; }
+    .summary { position: absolute; left: 145px; top: 510px; font-size: 13pt; font-weight: 400; line-height: 1.65; color: var(--c-text); opacity: 0.82; max-width: 480px; }
+    .meta-block { position: absolute; left: 145px; top: 730px; max-width: 540px; }
+    .meta-row { margin-bottom: 24px; }
+    .meta-label { display: block; font-size: 9pt; letter-spacing: 2.5px; text-transform: uppercase; color: var(--c-muted); font-weight: 500; margin-bottom: 4px; }
+    .meta-value { display: block; font-size: 12pt; color: var(--c-text); font-weight: 500; }
+    .footer-bar { position: absolute; bottom: 95px; left: 145px; right: 95px; display: flex; justify-content: space-between; align-items: center; padding-top: 18px; border-top: 1px solid var(--c-mid); opacity: 0.7; }
+    .footer-left { font-size: 9pt; letter-spacing: 2.5px; text-transform: uppercase; color: var(--c-muted); }
+    .footer-right { font-size: 9pt; letter-spacing: 2.5px; text-transform: uppercase; color: var(--c-muted); }
+  </style>
+</head>
+<body>
+  <div class="cover">
+    <div class="layer-bg"></div>
+    <div class="layer-struct">
+      <div class="anchor-line"></div>
+      <div class="corner-mark-tl"></div>
+      <div class="corner-mark-br"></div>
+    </div>
+    <div class="layer-content">
+      <div class="kicker">PBCSF International Track &middot; Topic A</div>
+      <div class="hero-title">FinWise<br>Technical</div>
+      <div class="hero-title-accent">Documentation</div>
+      <div class="summary">
+        System architecture, core algorithm description, and security design
+        for an agentic AI personal finance copilot with 11 tools, 4-layer
+        architecture, Monte Carlo simulation, Holt-Winters forecasting, and
+        5 novel innovation features.
+      </div>
+      <div class="meta-block">
+        <div class="meta-row">
+          <span class="meta-label">Deliverable</span>
+          <span class="meta-value">01 &mdash; Technical Documentation (Mandatory)</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Submission</span>
+          <span class="meta-value">PBCSF International Track &middot; October 2026</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Tech Stack</span>
+          <span class="meta-value">Next.js 16 &middot; TypeScript &middot; Prisma &middot; Z.ai LLM</span>
+        </div>
+      </div>
+      <div class="footer-bar">
+        <span class="footer-left">FinWise &middot; Personal Finance Intelligence</span>
+        <span class="footer-right">v1.0 &middot; October 2026</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

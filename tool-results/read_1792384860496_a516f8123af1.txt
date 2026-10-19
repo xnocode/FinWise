@@ -1,0 +1,513 @@
+     1→---
+     2→name: ppt
+     3→metadata:
+     4→  author: Z.AI
+     5→  version: "1.0"
+     6→description: "Presentation creation, editing, and analysis for .pptx files: (1) Creating new presentations, (2) Modifying or editing content, (3) Working with layouts, (4) Adding comments or speaker notes. Academic/paper-based presentations use the embedded Beamer module at end of this file (PDF output only)."
+     7→license: Proprietary. LICENSE.txt has complete terms
+     8→---
+     9→
+    10→# PPT creation, editing, and analysis
+    11→
+    12→## Overview
+    13→
+    14→A user may ask you to create, edit, or analyze the contents of a .pptx file. A .pptx file is essentially a ZIP archive containing XML files and other resources that you can read or edit. You have different tools and workflows available for different tasks.
+    15→
+    16→## Reading and analyzing content
+    17→
+    18→### Text extraction
+    19→
+    20→To read the text content of a presentation, convert it to markdown:
+    21→
+    22→```bash
+    23→python -m markitdown path-to-file.pptx
+    24→```
+    25→
+    26→### Raw XML access
+    27→
+    28→For comments, speaker notes, slide layouts, animations, design elements, or complex formatting, unpack the presentation and inspect its raw XML.
+    29→
+    30→#### Unpacking a file
+    31→
+    32→```
+    33→python ooxml/scripts/unpack.py <office_file> <output_dir>
+    34→```
+    35→
+    36→**Note**: `unpack.py` is at `skills/pptx/ooxml/scripts/unpack.py` relative to the project root. If not found, run `find . -name "unpack.py"` to locate it.
+    37→
+    38→#### Key file structures
+    39→
+    40→| Path | Contents |
+    41→|------|----------|
+    42→| `ppt/presentation.xml` | Main metadata and slide references |
+    43→| `ppt/slides/slide{N}.xml` | Per-slide content |
+    44→| `ppt/notesSlides/notesSlide{N}.xml` | Speaker notes |
+    45→| `ppt/comments/modernComment_*.xml` | Slide comments |
+    46→| `ppt/slideLayouts/` | Layout templates |
+    47→| `ppt/slideMasters/` | Master slide templates |
+    48→| `ppt/theme/` | Theme and styling |
+    49→| `ppt/media/` | Images and other media |
+    50→
+    51→#### Typography and color extraction
+    52→
+    53→**When emulating an existing design**, extract typography and colors before starting:
+    54→
+    55→1. **Theme file** — `ppt/theme/theme1.xml`: colors (`<a:clrScheme>`), fonts (`<a:fontScheme>`)
+    56→2. **Slide content** — `ppt/slides/slide1.xml`: actual font usage (`<a:rPr>`) and colors
+    57→3. **Global search** — grep for `<a:solidFill>`, `<a:srgbClr>`, and font references across all XML files
+    58→
+    59→---
+    60→## Creating a new PowerPoint presentation **without a template**(most case,creating ppt/pptx from scrach)
+    61→
+    62→When user upload pptx and ask for to use it as template ,do not follow this section routine! follow ## Editing an existing PowerPoint presentation（pptx）instead
+    63→You are an elite HTML-PPT design agent. You produce beautiful, content-rich, 1280x720 slide decks rendered as standalone HTML pages and committed to disk via the `Write` tool. Use the `Agent` tool to fan out the rendering of body slides to a **ppt sub-agent** (`subagent_type: ppt-expert`, falling back to `general-purpose` if unavailable) so multiple sections render in parallel.
+    64→
+    65→You operate in four strict stages. Do NOT skip or reorder stages.
+    66→
+    67→═══════════════════════════════════════════════════════════════════════
+    68→STAGE 1 — CLARIFY (collect mandatory inputs via `AskUserQuestion`)
+    69→═══════════════════════════════════════════════════════════════════════
+    70→
+    71→**Step 0 — Reference detection (run BEFORE asking any question).**
+    72→
+    73→Before invoking `AskUserQuestion`, look at the user's upload directory and
+    74→the user's prompt for a single reference asset. The case below is
+    75→auto-handleable; run the matching extraction script first,
+    76→write the result into `<work_dir>/slides/`,the <work_dir> is directly the download directory
+    77→then SKIP the palette and typography questions in the list below (the user has implicitly answered
+    78→them by handing you the reference). Still ask the remaining questions.
+    79→
+    80→  • **HTML reference** (`*.html` containing the desired deck-wide style):
+    81→      ```
+    82→      python /home/z/my-project/skills/ppt/scripts/extract_html_style.py \
+    83→          <reference.html> <work_dir>/slides
+    84→      ```
+    85→      Writes `<work_dir>/slides/global.css` by concatenating every
+    86→      `<style>...</style>` block from the source HTML verbatim. The
+    87→      generated slides will reuse those CSS variables and class names
+    88→      directly. After running this, `slides_brief.json.design` should
+    89→      record `reference: "imitating <reference.html>"` and the model
+    90→      should NOT redefine the palette/typography in `global.css`.
+    91→
+    92→If neither reference exists, proceed to the questions below as normal.
+    93→
+    94→**Step 1 — Ask the user.** Before doing anything else (after Step 0),
+    95→collect the user's explicit choices on the dimensions below.
+    96→**These are mandatory inputs — do NOT silently default any of them**,
+    97→even when the user's request hints at one. Explicit confirmation
+    98→prevents wrong-style decks and saves whole re-renders later.
+    99→
+   100→Mandatory dimensions — ask between 4-6 questions(not exceed 6 questions) across the 10 items below.
+   101→Items marked **★** are strictly mandatory (palette, typography, per-page detail);
+   102→the rest should be asked unless the user's original request explicitly rules
+   103→them out (e.g. "internal deck, no notes" → skip notes question).
+   104→
+   105→  1. **主题与目的 (Topic & purpose)** — the deck's core theme and the main
+   106→     aspects it should showcase. Ask this FIRST — every downstream choice
+   107→     (length, layouts, data) hinges on it, so do not let it be implicit.
+   108→  2. **目标受众 (Audience & tone)** — who is this for, what register.
+   109→  3. **篇幅 (Deck length)** — tight range. like 1–8 / 8–12 / 12以上 slides，you must give user short slides choice.
+   110→  4. **风格与基调 (Style & tone)** — the deck's overall voice as ONE preset:
+   111→     商务 (business) / 简约 (minimal) / 正式汇报 (formal report). This is the
+   112→     high-level register; the palette and typography questions below refine
+   113→     it into concrete colors and fonts.
+   114→  5. **Visual reference** — a recognizable style anchor (one or two named
+   115→     reference decks / websites the user wants this to feel like).
+   116→  6. **★ Palette (调色盘)** — ONE question that collects **all three** of
+   117→     `background` / `primary` / `accent` together (as a unified palette
+   118→     choice). Do NOT split into three separate questions. The options the
+   119→     user picks from must be generated at runtime — do not hard-code
+   120→     specific colors or hex codes here in the skill.
+   121→  7. **Speaker notes (备注讲稿)** — none / short bullet hints / verbatim full script.
+   122→  8. **已有素材 / 数据来源 (Existing materials / data sourcing)** — 用户是否
+   123→     已提供素材或数据;是否需要在最终页面标注数据来源 (是 / 否)。
+   124→  9. **Must include data**
+   125→  10. **Need image search**
+   126→Important constraints when constructing the actual `AskUserQuestion` calls:
+   127→  • **Think carefully before asking.** Before each `AskUserQuestion` call,
+   128→    spend real reasoning on the user's domain, audience, and visual
+   129→    reference (Q1 / Q4). The point of asking is to surface CHOICES — so
+   130→    the choices you offer must themselves be a creative, well-considered
+   131→    design proposal. Generic "Light / Dark / Other" is a failure mode.
+   132→  • **Each option must be a concrete creative direction**, not a category
+   133→    label. For the palette question that means each option names a coherent
+   134→    trio (background + primary + accent) tuned to the user's topic — e.g.
+   135→    a finance deck and a children's-book pitch should NEVER see the same
+   136→    three palette options. Same rule for typography: each option proposes
+   137→    a specific heading + body pairing that fits the deck's voice.
+   138→  • **Mark your recommendation.** In every question, pick ONE option that
+   139→    you genuinely believe is the strongest fit and put it FIRST, with the
+   140→    suffix `(Recommended)` appended to its `label`. Use this for palette,
+   141→    typography, per-page detail level, and visual reference — anywhere the
+   142→    answer materially shapes the deck. Do NOT mark more than one option as
+   143→    recommended per question.
+   144→  • The palette question is a SINGLE question whose options each describe
+   145→    a coherent (background + primary + accent) trio. The user picks one
+   146→    trio, or chooses "Other" to provide their own three colors.
+   147→
+   148→How to dispatch the questions:
+   149→  • `AskUserQuestion` carries 4-6 questions per call. 
+   150→  • Each question: a short `header` (≤12 chars), the `question` itself, and
+   151→    3–4 `options` (each with `label` + short `description`). The user can
+   152→    always pick "Other" for free-text custom input.
+   153→  • Do NOT call any other tool in the same turn as `AskUserQuestion`.
+   154→  • Do NOT proceed to Stage 2 until every mandatory dimension has been
+   155→    answered. Once answered, the palette / typography / detail-level
+   156→    choices flow directly into `slides_brief.json.design` and the per-slide
+   157→    `task_brief` in Stage 3 — they MUST match exactly.
+   158→
+   159→═══════════════════════════════════════════════════════════════════════
+   160→STAGE 2 — RESEARCH (parallel web search + page visits + parallel image search)
+   161→═══════════════════════════════════════════════════════════════════════
+   162→Gather facts and visual assets.
+   163→
+   164→Text research:
+   165→  • Use `web_search` function for up-to-date facts(if the user do not provided). Batch 2-3 queries across parallel calls in one turn.
+   166→      ```bash
+   167→    # Simple search query
+   168→    z-ai function --name "web_search" --args '{"query": "artificial intelligence","num": 3}'
+   169→
+   170→    # Using short options
+   171→    z-ai function -n web_search -a '{"query": "cryptocurrency news", "num": 3, "recency_days": 7}'
+   172→    ```
+   173→
+   174→
+   175→Image assets (THIS IS IMPORTANT):
+   176→  • For EVERY slide that needs a photo or illustration, run the `z-ai image-search` CLI (provided by `z-ai-web-dev-sdk`). Prerequisite: `npm install -g z-ai-web-dev-sdk` (or `bun add -g z-ai-web-dev-sdk`), which installs the `z-ai` binary.
+   177→  • Basic invocation:
+   178→        z-ai image-search --query "<natural-language sentence>" --count 3
+   179→    The CLI prints the JSON response (pretty-formatted) to stdout(--count control the image number return,use 5 by default). The query MUST be a natural-language sentence (NOT keywords). The response contains `results[].original_url` (OSS-hosted, embeddable) and `results[].caption`.
+   180→  • **Output handling — print-to-stdout only.** pick the best `original_url`, and **bake that URL directly into the slide's `task_brief`** in `slides_brief.json` (see Stage 3). The sub-agent that renders the slide has no access to the search results, so the URL MUST be inlined into `task_brief` — that is the only carrier.
+   181→  • Very important!!! if you want to use local image, YOU MUST use RELATIVE path rather than absolute path
+   182→  • You MAY emit several `Bash` calls in the SAME assistant turn — they will run concurrently. Prefer batching 3–4 image searches per turn to save wall time.
+   183→  • HARD LIMIT: invoke the image-search CLI at most 6 times total across the whole trajectory. Plan your image needs up front and reuse returned URLs across multiple slides where appropriate.
+   184→  • If anything goes wrong (e.g. `Unknown command "image-search"`, auth errors, empty results, region tuning, `--no-rank` for speed) consult the image-search skill — it documents every flag, the full response schema, and the standard troubleshooting matrix.
+   185→
+   186→═══════════════════════════════════════════════════════════════════════
+   187→STAGE 3 — PLAN (commit design as files on disk before fan-out)
+   188→═══════════════════════════════════════════════════════════════════════
+   189→After research, commit the deck design(global css) and slide brief(slides_brief.json) to disk so the build stage and every sub-agent share the SAME source of truth.
+   190→
+   191→**Step 3.0 — After `Reasearch` succeeds**, in a SINGLE assistant turn, use `Write` to create:
+   192→
+   193→**`<work_dir>` definition (MANDATORY)**: `<work_dir>` IS the user's `download/` directory itself. Do NOT create an intermediate themed/topic-named subdirectory (e.g. `download/theme_ppt/`, `download/<topic>/`). The slides folder must end up at `download/slides/`, NOT `download/<anything>/slides/`. Every `<work_dir>/...` path in this skill resolves under `download/` directly.
+   194→You should first create a directory '<work_dir>/slides' to keep the produced files
+   195→**Directory layout (MANDATORY)**: `global.css`, `slides_brief.json`, AND every `slide_NN.html` MUST all live under the SAME single directory `<work_dir>/slides/` (i.e. `download/slides/`). Do NOT place `global.css` or `slides_brief.json` at `<work_dir>/` root, do NOT split slides into per-section subfolders, and do NOT create an `images/` subfolder — image-search results are NEVER written to disk; the picked `original_url` is inlined directly into each slide's `task_brief` (see Stage 2). The flat-under-`slides/` layout is what every sub-agent assumes when it reads the brief and resolves the `<link rel="stylesheet">` href.
+   196→
+   197→Final on-disk layout after Stage 3:
+   198→```
+   199→<work_dir>/slides/
+   200→├── global.css
+   201→├── slides_brief.json
+   202→├── slide_01.html        ← written in Stage 4 by sub-agents
+   203→├── slide_02.html
+   204→└── ...
+   205→```
+   206→
+   207→1. `<work_dir>/slides/global.css` — the deck-wide stylesheet that EVERY slide will `<link>` into its `<head>`. Bake in:
+   208→     • You must use the font size /font style/color in the global.css, do not redefine it in each html
+   209→     • CSS variables for the chosen palette: `--bg`, `--primary`, `--accent`, plus any tonal stops you need.
+   210→     • `@import` lines for the chosen Google Fonts and a `:root` typography scale (title / subtitle / body / footnote sizes — see SLIDE QUALITY BAR).
+   211→     • Reusable utility classes for the slide canvas (e.g. `.slide { width:1280px; min-height:720px; overflow:hidden; padding:64px; background:var(--bg); }`), card surfaces, and accent emphasis.
+   212→     • NO per-slide layout CSS — that lives inside each slide's HTML. Keep this file under ~150 lines.
+   213→     • Avoid CSS class collisions with Tailwind utilities
+   214→          When the slide loads Tailwind via <script src="https://cdn.tailwindcss.com">, the CDN injects its utility styles into <head> after your <link
+   215→          rel="stylesheet">. Custom classes that share a name with a Tailwind utility lose the cascade (same specificity, Tailwind comes later) and get silently
+   216→          overridden.
+   217→          Critical example: Do not name heading classes .h-1 / .h-2 / .h-3. In Tailwind these are height utilities (.h-1 = 4px, .h-2 = 8px, .h-3 = 12px). Applied to
+   218→          a heading, the box collapses to a few pixels while the text still renders at full size — the heading visibly overlaps the element below it.
+   219→     • Because `global.css` and the slide HTMLs are siblings inside `<work_dir>/slides/`, slides may link it as `<link rel="stylesheet" href="global.css">` (relative). 
+   220→     • keep these in mind！！！ Global CSS scope — typography tokens only, no typography classes.Define typography design tokens (--font-heading, --font-body, --font-cn, --font-num, --fs-display, --fs-h1, --fs-h2, --fs-h3, --fs-body, --fs-small, --fs-micro) on :root in
+   221→      global.css Do not ship pre-baked typography classes like .h-display / .h-1 / .h-2 / .h-3 / .cn-sub that bundle font-family, font-size, line-height,font-weight, and letter-spacing together. (This rule applies only to font family / size — palette, spacing, layout primitives, and other non-typography utilities can stilllive in global.css as before.) keep these in mind！！！
+   222→
+   223→2. `<work_dir>/slides/slides_brief.json` — the dispatch manifest. Schema:
+   224→     ```json
+   225→     {
+   226→       "design": {
+   227→         "title":"(ppt title)",
+   228→         "style_name": "...",
+   229→         "palette": {"background": "#...", "primary": "#...", "accent": "#..."},
+   230→         "typography": {"heading": "xx", "body": "xx", "numeric": "xx"},
+   231→         "reference": "Apple keynote / The Verge / ..."
+   232→       },
+   233→       "global_css_path": "<absolute path to <work_dir>/slides/global.css>",
+   234→       "slides_dir": "<absolute path to <work_dir>/slides>",
+   235→       "language": "zh|en|bilingual",
+   236→       "speaker_notes": "none | short | full",
+   237→       "slides": [
+   238→         {
+   239→           "title": "...",
+   240→           "layout": "cover",
+   241→           "output_path": "<absolute path to <work_dir>/slides/slide_XX.html>",
+   242→           "task_brief": "Self-contained brief — see rules below."
+   243→         },
+   244→         ...
+   245→       ]
+   246→     }
+   247→     ```
+   248→   • Slide ORDER is the order of entries in the `slides` array — no `position` / index field. To reorder a deck, reorder the list.
+   249→   • Every slide MUST have `title`, `layout`, `output_path`, `task_brief`.
+   250→   • `output_path` is the ABSOLUTE path the slide HTML will be written to. Filenames are arbitrary stable identifiers (e.g. `slide_01.html`, `slide_02.html` at first creation) — they live in the same directory as `global.css` and `slides_brief.json`, but their alphabetical order does NOT define slide order. Once assigned, do NOT rename a slide's file when reordering or inserting; keep the filename stable and just move its entry in the list.
+   251→   • `layout` MUST be chosen per page from a coherent catalog (cover, section header, key message, bento grid, split text+image, timeline, stats, comparison, quote, closing, etc.). Diversify layouts across pages — do NOT reuse the same layout for consecutive slides.
+   252→   • Section structure for longer decks: once the deck gets long (roughly **≥10 pages**), split the body into 2–5 named chapters with a `section header` page at the start of each. A reasonable rhythm is 3–6 content pages per chapter; if a stretch goes past ~7 pages without a break, that's a hint another section header would help. Section-header `task_brief` typically carries: chapter number ("01 / 03"), chapter title, one short tagline; no body bullets, no images. For shorter decks, only add a section header if the content has a strong narrative break.
+   253→   • `task_brief` is the SOLE input the sub-agent will see for that slide — it MUST be self-contained for the renderer. 
+   254→       – Keep it concise and to the point: carry exactly what the renderer needs, no filler, no restating the design block, no meta reminders.
+   255→       – Restate the slide's exact text content: headline, body copy, data points, stats, quotes, key phrases. Copy verbatim — do not paraphrase loosely.
+   256→       – Resolve every "Hero photo of …" / "icon of …" reference into the FULL image URL (https://…) from your `z-ai image-search` results. The sub-agent has NO access to search results — if a URL isn't in the brief (either inlined here or read back from a saved `images/<slot>.json` manifest), the slide can't display the image.
+   257→       – If the user asked for speaker notes in Stage 1, append a `Speaker notes:` block at the END of the brief. write the notes request. do NOT write notes verbatim here. The top-level `speaker_notes` field (`none` / `short` / `full`) tells the sub-agent whether and how deeply to generate notes from the rendered slide. The sub-agent will inject them into the slide HTML as `<aside data-notes>…</aside>` (visually hidden). If the user did NOT request notes, omit this block — do not invent notes.
+   258→       – Add any layout-specific payload the sub-agent needs (chart data values, ordered timeline events, comparison columns, exact quote attribution, etc.). The committed `design` block (palette, typography, reference) is already in `slides_brief.json`, so do NOT repeat it inside each `task_brief`.
+   259→       – Do NOT carry meta / quality-bar reminders inside the brief: word-count targets, "diversify layouts", "no photos", "verify contrast", etc. Those live ONCE in the sub-agent's self-audit checklist (Stage 4) — repeating them per slide is noise. If the slide is image-free, simply do not include any image URL; the sub-agent will not invent one.
+   260→
+   261→═══════════════════════════════════════════════════════════════════════
+   262→STAGE 4 — BUILD ( FAN OUT `Agent` sub-agents to actually write the slides)
+   263→═══════════════════════════════════════════════════════════════════════
+   264→every slide, cover / TOC / body / closing, is committed by a `ppt` sub-agent that calls the `Write` tool itself. The main agent NEVER calls `Write` to commit slide HTML. This keeps rendering uniformly parallel and removes any temptation to serialize work onto the main turn.
+   265→
+   266→  • `Agent(subagent_type="ppt-expert", description=..., prompt=...)` — spawn a sub-agent that writes a CONTIGUOUS RANGE of slides. Use for every slide in the deck — cover, intro, data, cases, narrative chapters, closing, thank-you. Single-slide groups are fine when a section (or the cover) stands alone.
+   267→
+   268→  1. Immediately after Stage 3's files are on disk, emit ALL `Agent` calls in ONE assistant turn. Everything in that turn runs concurrently — this is ~3–5x faster than sequential iteration.
+   269→
+   270→  2. How to group the slides:
+   271→     • A group is a CONTIGUOUS RANGE of entries in the `slides` list (e.g. indices 0..4 in JSON order). The sub-agent reads the briefs for those entries from `slides_brief.json` and writes each slide's HTML to its `output_path` in list order — locking in a consistent layout/component language across a section.
+   272→     • Slides in DIFFERENT groups run IN PARALLEL.
+   273→     • Keep groups small (5–7 slides). Good groups follow narrative sections: cover / intro / data / cases / closing.
+   274→     • HARD CAP: at most **3 `Agent` calls per deck total**. If the body has more sections than that, MERGE adjacent sections into a single group rather than spawning a 6th. The cap is real — more groups means more sub-agent spin-up overhead AND weaker visual consistency across the deck. 
+   275→  3. Sub-agent dispatch prompt — every `Agent` call's `prompt` MUST explicitly carry these three things at the top, in this exact order:
+   276→     a) the index range (0-based, half-open) into `slides_brief.json.slides[]` the sub-agent is responsible for (`start..end`),
+   277→     b) the ABSOLUTE path to `slides_brief.json` (`<work_dir>/slides/slides_brief.json`),
+   278→     c) the ABSOLUTE path to `global.css` (`<work_dir>/slides/global.css`). directly use it in every html
+   279→     If any of the three is missing or relative, the sub-agent will fail to render. Do NOT hand-wave these as "see the brief" — write the literal absolute paths and the literal index numbers into every dispatch prompt.
+   280→
+   281→     Use this exact shape for every `Agent` call's `prompt` field (substitute the bracketed values per group):
+   282→
+   283→     ```
+   284→     You are a slide-rendering sub-agent. Render ONLY slides `slides[{start}:{end}]` (0-based, half-open) — do NOT touch other slides.
+   285→
+   286→     First Read these absolute paths:
+   287→       • Brief manifest:    {absolute path to <work_dir>/slides/slides_brief.json}
+   288→       • Global stylesheet: {absolute path to <work_dir>/slides/global.css}
+   289→     Both live in the SAME directory ({absolute path to <work_dir>/slides/}); write each slide HTML there as a sibling.
+   290→
+   291→     For each entry in `slides[{start}:{end}]`, in list order, produce one 1280x720 standalone HTML page that:
+   292→       - starts with `<!DOCTYPE html>`, ends with `</html>`, and links `global.css` via `<link rel="stylesheet" href="global.css">` in `<head>`
+   293→       - uses ONLY the palette/typography in `design`, and renders EVERY fact/headline/bullet/stat/quote/image URL in `task_brief` verbatim
+   294→       - obeys every constraint in the SLIDE QUALITY BAR (canvas, contrast, layout discipline)
+   295→       - speaker notes: if `speaker_notes` is `short`/`full`, generate notes (`short` = 3–5 bullet hints, `full` = ~80–150 word script; match deck language; cover any `notes_must_include:` points) embedded as the LAST `<body>` child `<aside data-notes class="hidden">…</aside>`. If `none`, omit it.
+   296→     Commit each slide with `Write(file_path=<output_path from brief>, content=<full HTML>)`.
+   297→
+   298→     Update the worklog only once, when finished — one sentence summary per slide.
+   299→     ```
+   300→
+   301→     Pass `subagent_type: ppt-expert`. If the harness reports it as unavailable, fall back to `subagent_type: general-purpose` and prepend the rendering rules from this skill into the prompt.
+   302→
+   303→  4. The `Agent` tool result returns ONLY the sub-agent's textual summary(in one sentence) — it does NOT echo the HTML source. To inspect a generated slide, call `Read(file_path=<output_path>)`.
+   304→
+   305→  5. Sub-agent slide HTML rules: must start with `<!DOCTYPE html>`, end with `</html>`, link `global.css`, follow the SAME design palette / typography committed in `slides_brief.json`, and obey every constraint in the SLIDE QUALITY BAR. The sub-agent must NOT echo the HTML as plain text — only the `Write` call commits the slide.
+   306→
+   307→
+   308→═══════════════════════════════════════════════════════════════════════
+   309→Only when user requested a pptx file，if user not request，directly give a summary and end the task — how to EXPORT TO PPTX:
+   310→═══════════════════════════════════════════════════════════════════════
+   311→Convert `<work_dir>/slides/` into ONE `.pptx` via `batch_html2pptx.js`.
+   312→
+   313→The converter walks sorted filename order. Right before invoking it,
+   314→ensure filenames sort alphabetically into the same order as
+   315→`slides_brief.json.slides[]`. If editing rounds left them out of order,
+   316→rename to `slide_{NN:02d}.html` matching list index AND update each
+   317→entry's `output_path`. This is the ONLY step that renames files.
+   318→You can directly run the files，do not try to modify it
+   319→Invoke:
+   320→```
+   321→cd /home/z/my-project && NODE_PATH=/usr/local/lib/node_modules nohup node /home/z/my-project/skills/ppt/batch_html2pptx.js /home/z/my-project/download/slides /home/z/my-project/download/xx.pptx
+   322→```
+   323→
+   324→  • Arg 1: slides directory. Arg 2 (optional): output path; defaults to
+   325→    `<work_dir>/<basename(work_dir)>.pptx`.
+   326→  • `NODE_PATH` is required so `pptxgenjs` / `playwright` / `sharp` resolve.
+   327→  • Per-slide warnings (`🚨 CRITICAL OVERFLOW`, `⚠ BOUNDS/FONT/OVERLAP/LAYOUT`)
+   328→    are non-fatal, but treat any `🚨 CRITICAL` as a real bug — fix the
+   329→    source HTML and re-run (the pptx is overwritten in place).
+   330→
+   331→After export: `ls -lh <path>` to confirm, then report the `.pptx` path
+   332→(and source slide HTML paths) to the user.
+   333→
+   334→═══════════════════════════════════════════════════════════════════════
+   335→MULTI-ROUND HTML EDITING — keep `slides_brief.json` in sync
+   336→═══════════════════════════════════════════════════════════════════════
+   337→When you only need to editing severals pages，directly read and editing them,when you need to change the entire design,try to edit global.css first
+   338→Very inportant!: Keep only one version of html slides directly in "slides/" directory,do not keep mutiple versions of html. and there is only one version of slides.
+   339→Very inportant!: when deleting or adding pages,first editing slides_brief.json first
+   340→`slides_brief.json` is the single source of truth for the deck's
+   341→structure. Slide ORDER is the order of entries in `slides[]` — there is
+   342→no `position` / index field, so adding / removing / reordering NEVER
+   343→requires renumbering. Whenever a follow-up edit ADDS or REMOVES a slide,
+   344→update the brief in the SAME turn — never let on-disk slides and the
+   345→brief diverge.
+   346→
+   347→  • Add a page → create the HTML file (any stable filename like
+   348→    `slide_NEW1.html`) AND insert a matching entry into
+   349→    `slides_brief.json.slides[]` at the desired position in the list
+   350→    (`title`, `layout`, `output_path`, self-contained `task_brief`).
+   351→  • Remove a page → delete the file AND remove its entry from the list.
+   352→  • Reorder → just move entries within `slides[]`. Do NOT rename files.
+   353→
+   354→In-place content tweaks only need a brief update if the change is large
+   355→enough that the old `task_brief` no longer describes the slide
+   356→(different headline, new image URL, layout switched). Typo fixes do not.
+   357→
+   358→═══════════════════════════════════════════════════════════════════════
+   359→SLIDE QUALITY BAR (applies to every page)
+   360→═══════════════════════════════════════════════════════════════════════
+   361→  • Exact canvas: 1280 × 720, `overflow-hidden`. No scroll.
+   362→  • Real content density: every page carries 60-120 words of substantive text — no placeholders, no lorem ipsum, no "insert data here".
+   363→  • Exactly the chosen palette on every page. Background/primary/accent must match `slides_brief.json.design.palette`.
+   364→  • Every text color on every background must pass WCAG AA (4.5:1 contrast).
+   365→  • Use TailwindCSS via CDN (`<script src="https://cdn.tailwindcss.com"></script>`) and link the deck-wide `global.css`. Use Google Fonts for typography.
+   366→  • Diversify layouts across slides — vary between cover, section header, split text+image, bento grid, stats, timeline, comparison, quote, closing, etc. Never repeat the same layout back-to-back.
+   367→  • Never fabricate image URLs. Only use URLs that came back from the `z-ai image-search` CLI.
+   368→  • Include icons (Material Icons via `<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">` and `<i class="material-icons">name</i>`). No `<script>` icon loaders.
+   369→  • Numbers, dates, and technical terms render in the proper numeric font per typography guide.
+   370→  • No graphical timelines, no SVG/connector flowcharts, no code-drawn maps, no base64 images, no Reveal.js.
+   371→  • Headers and footers are OPTIONAL, not mandatory. Add a page header/footer (deck title, page number, brand mark, footnote bar) only when user asked !!!
+   372→
+   373→═══════════════════════════════════════════════════════════════════════
+   374→GENERAL RULES
+   375→═══════════════════════════════════════════════════════════════════════
+   376→  • Batch aggressively. Prefer 1 turn with 5 tool calls over 5 turns with 1 tool call each.
+   377→  • Parallelism is free — `WebSearch`, `WebFetch`, `Bash` (image-search), and the fan-out of `Agent` sub-agents all run concurrently when emitted in the same turn; use it.
+   378→  • Always respond in the user's language.
+   379→
+   380→## Editing an existing PowerPoint presentation（pptx）
+   381→
+   382→Pick the approach by what you're editing:
+   383→
+   384→- **Approach A — `python-pptx` script** — preferred for text replacement, deleting/reordering slides, and any edit that should preserve fonts/colors/layout. Simpler and safer than raw XML for content swaps.
+   385→- **Approach B — raw OOXML** — required for animations, transitions, comments, speaker notes XML, theme tweaks, custom layout edits — anything `python-pptx` can't reach.
+   386→
+   387→### Approach A — `python-pptx` text replacement (preferred for text edits)
+   388→
+   389→**Workflow**
+   390→
+   391→1. **Inventory the deck** — walk every slide, recurse into GROUP shapes (`shape_type == 6`), `print(repr(para.text))`. Use the inventory as the source of truth for replacement keys; rendered text often contains hidden chars that won't survive copy-paste.
+   392→
+   393→2. **Helpers** — keep the build script short:
+   394→
+   395→   ```python
+   396→   from pptx import Presentation
+   397→   from pptx.enum.text import MSO_AUTO_SIZE
+   398→   from pptx.oxml.ns import qn
+   399→   from pptx.util import Emu, Pt
+   400→
+   401→   def iter_text_frames(shapes):
+   402→       for s in shapes:
+   403→           if s.shape_type == 6:                 # GROUP → recurse
+   404→               yield from iter_text_frames(s.shapes)
+   405→           elif s.has_text_frame:
+   406→               yield s, s.text_frame
+   407→
+   408→   def _norm(s):                                  # strip soft breaks before matching
+   409→       return s.replace("\x0b", "").replace("\r", "").strip()
+   410→
+   411→   def replace_in_paragraph(p, new_text):         # first-run replace preserves formatting
+   412→       runs = p.runs
+   413→       if not runs:
+   414→           p.add_run().text = new_text; return
+   415→       runs[0].text = new_text
+   416→       for r in runs[1:]:
+   417→           r._r.getparent().remove(r._r)
+   418→
+   419→   def apply_replacements(tf, mapping):           # full-frame match, then per-paragraph
+   420→       m = {_norm(k): v for k, v in mapping.items()}
+   421→       full = "\n".join(p.text for p in tf.paragraphs)
+   422→       if _norm(full) in m:
+   423→           parts = m[_norm(full)].split("\n")
+   424→           for i, p in enumerate(tf.paragraphs):
+   425→               replace_in_paragraph(p, parts[i] if i < len(parts) else "")
+   426→           return
+   427→       for p in tf.paragraphs:
+   428→           if _norm(p.text) in m:
+   429→               replace_in_paragraph(p, m[_norm(p.text)])
+   430→
+   431→   def delete_slide(prs, idx):                    # call high-index first
+   432→       sld = list(prs.slides._sldIdLst)[idx]
+   433→       prs.part.drop_rel(sld.get(qn("r:id")))
+   434→       prs.slides._sldIdLst.remove(sld)
+   435→   ```
+   436→
+   437→
+   438→
+   439→**Budget every shape BEFORE generating replacement text (do this first)**
+   440→
+   441→Most overflow bugs come from generating copy without knowing the target box's capacity. Before drafting any replacement, walk the deck once and emit a capacity manifest — then feed it to the content step as a hard constraint.
+   442→
+   443→For each text-bearing shape collect: `slide_idx, shape_id, w_cm, h_cm, font_pt, orig_text, orig_len`. Derive:
+   444→
+   445→- `chars_per_line ≈ w_cm / (font_pt × 0.014)` for CJK; multiply by ~2 for Latin. Mixed text: weight by character class.
+   446→- `lines ≈ h_cm / (font_pt × 0.0185)` (line-height ≈ 1.3).
+   447→- `budget = min(chars_per_line × lines, orig_len × 1.1)`. The template designer already tuned `orig_len` for readability — treat it as the ceiling, not a starting point.
+   448→- `role = "label"` if `h_cm < 1.5` OR `orig_len ≤ 8` OR `font_pt ≥ 20`; else `"body"`.
+   449→
+   450→Rules the generation step MUST obey:
+   451→- **Label boxes**: short phrase only. No full sentences, no trailing punctuation, no "term + explanation" expansion. Hard cap = `max(orig_len, 8)`. SWOT tiles, timeline tags, KPI labels all fall here.
+   452→- **Body boxes**: stay within `budget`. Font size is inherited from the template; shrinking is a last resort, not plan A.
+   453→- If the content is genuinely longer and the layout permits, **grow the box itself** (`widen_to_fit(shape, Emu(...))` — see below) rather than shrinking the font. Check first that `left + width` won't collide with the next shape.
+   454→
+   455→**Handling long replacement / unwanted wrapping after replacement**
+   456→
+   457→When a longer replacement wraps to a new line, apply remedies in this order (cheapest first):
+   458→
+   459→```python
+   460→def widen_to_fit(shape, max_grow_emu=Emu(0)):
+   461→    """Let PowerPoint size the shape to its text. Pass max_grow_emu>0 to also
+   462→    grow the explicit width (centered on the original position) before sizing."""
+   463→    if max_grow_emu:
+   464→        shape.left -= max_grow_emu // 2
+   465→        shape.width += max_grow_emu
+   466→    shape.text_frame.word_wrap = True
+   467→    shape.text_frame.auto_size = MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT
+   468→
+   469→def shrink_text_to_fit(shape):
+   470→    """Keep the box fixed; let PowerPoint shrink the font to fit."""
+   471→    shape.text_frame.word_wrap = True
+   472→    shape.text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+   473→```
+   474→
+   475→1. **Budget first (preferred).** Check `shape.width` × `font_size` from inventory and trim the replacement so it fits the original visual budget. Numeric badges / small label boxes (`width ≤ 0.7"`, `font_size ≥ 16pt`) hold ~3–4 chars max.
+   476→2. **Widen the shape** with `widen_to_fit(shape, Emu(...))` when the content is genuinely longer and there's free space next to it. Always check the shape isn't going to collide with a neighbor first (compare `left+width` against the next shape's `left`).
+   477→3. **Shrink the font** with `shrink_text_to_fit(shape)` only for tight-layout boxes (table cells, numeric badges) where widening would break the grid. Last resort — it visibly breaks the typographic rhythm.
+   478→
+   479→Skip `word_wrap = False`: it makes text overflow the box invisibly in PowerPoint and looks broken when exported.
+   480→
+   481→**Critical gotchas**
+   482→
+   483→- **Soft line breaks (`\x0b`)** silently break exact-match. Always `_norm()` both keys and lookups.
+   484→- **GROUP shapes** (`shape_type == 6`) hide text frames — recurse.
+   485→- **First-run replace** preserves formatting; `paragraph.text = ...` destroys it.
+   486→- **Short tokens collide.** `"01"`, `"%"`, `"18"` recur across slides — keep identity mappings or scope per slide index, never global cross-mappings like `"18": "12"`.
+   487→- **Delete slides high-index first** — deleting index 5 first shifts every later index down by one.
+   488→
+   489→
+   490→
+   491→
+   492→
+   493→
+   494→
+   495→## Code Style Guidelines
+   496→**IMPORTANT**: When generating code for PPTX operations:
+   497→- Write concise code
+   498→- Avoid verbose variable names and redundant operations
+   499→- Avoid unnecessary print statements
+   500→
+   501→## Dependencies
+   502→
+   503→Required dependencies (should already be installed):
+   504→
+   505→- **markitdown**: `pip install "markitdown[pptx]"` (text extraction)
+   506→- **pptxgenjs**: `npm install -g pptxgenjs` (creating presentations)
+   507→- **playwright**: `npm install -g playwright@1.50.0` (HTML rendering)
+   508→- **react-icons**: `npm install -g react-icons react react-dom` (icons)
+   509→- **sharp**: `npm install -g sharp` (SVG rasterization and image processing)
+   510→- **LibreOffice**: `sudo apt-get install libreoffice` (PDF conversion)
+   511→- **Poppler**: `sudo apt-get install poppler-utils` (pdftoppm)
+   512→- **defusedxml**: `pip install defusedxml` (secure XML parsing)
+   513→

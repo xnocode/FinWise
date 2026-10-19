@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FinWise — Core Features</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<link rel="stylesheet" href="global.css">
+<style>
+  .h1 { font-family: var(--font-heading); font-weight: 700; font-size: 42px; line-height: 1.05; letter-spacing: -0.025em; }
+  .eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--primary-soft); }
+  .bento-card { background: var(--bg-elev-1); border: 1px solid var(--border); border-radius: 16px; padding: 18px; position: relative; overflow: hidden; }
+  .bento-card .icon-wrap { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: rgba(99,102,241,0.14); border: 1px solid rgba(99,102,241,0.28); }
+  .bento-card .icon-wrap.accent { background: rgba(16,185,129,0.14); border-color: rgba(16,185,129,0.28); }
+  .bento-title { font-family: var(--font-heading); font-weight: 700; font-size: 18px; color: var(--text-hi); margin-top: 10px; }
+  .bento-sub { font-size: 12px; color: var(--text-mid); line-height: 1.5; margin-top: 4px; }
+  .view-pill { font-family: var(--font-mono); font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.05); color: var(--text-mid); border: 1px solid var(--border); display: inline-block; margin-right: 4px; margin-top: 6px; }
+  .ghost-num { position: absolute; right: -10px; bottom: -34px; font-family: var(--font-heading); font-weight: 800; font-size: 130px; line-height: 1; color: rgba(255,255,255,0.025); pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="slide bg-grid bg-glow relative">
+
+  <!-- Header -->
+  <div class="absolute left-[64px] right-[64px] top-[36px] flex justify-between items-center">
+    <div class="flex items-center gap-3">
+      <span class="chip">05 · Core Features</span>
+      <span style="font-size: 12px; color: var(--text-lo); letter-spacing: 0.14em; text-transform: uppercase;">8 views · 4 pillars</span>
+    </div>
+    <div style="font-size: 12px; color: var(--text-lo); letter-spacing: 0.14em; text-transform: uppercase;">FinWise · Personal Finance Intelligence</div>
+  </div>
+
+  <!-- Title -->
+  <div class="absolute left-[64px] right-[64px] top-[78px] flex items-end justify-between">
+    <div>
+      <div class="eyebrow mb-2">Core Features</div>
+      <h1 class="h1 text-white">Eight views. <span style="font-style: italic; color: var(--accent-soft); font-weight: 500;">One financial brain.</span></h1>
+    </div>
+    <div style="font-size: 13px; color: var(--text-mid); max-width: 280px; text-align: right;">
+      Every view is fed by the same ledger and the same agent — so insights stay consistent end to end.
+    </div>
+  </div>
+
+  <!-- Bento grid: 4 cards (3 wide + 1 wide hero) -->
+  <div class="absolute left-[64px] right-[64px] top-[180px] bottom-[80px] grid grid-cols-12 grid-rows-2 gap-4">
+
+    <!-- Card 1: Smart Budgeting -->
+    <div class="bento-card col-span-4 row-span-1">
+      <div class="ghost-num" data-decor aria-hidden="true">01</div>
+      <div class="flex items-start justify-between">
+        <div class="icon-wrap"><span class="material-icons" style="color: var(--primary-soft); font-size: 20px;">savings</span></div>
+        <span class="chip" style="font-size: 10px; padding: 2px 8px;">Budgets</span>
+      </div>
+      <div class="bento-title">Smart Budgeting</div>
+      <div class="bento-sub">Envelopes auto-built from 550+ transactions. Live spend vs. limit, with category drift detection.</div>
+      <div>
+        <span class="view-pill">Overview</span>
+        <span class="view-pill">Budgets</span>
+      </div>
+    </div>
+
+    <!-- Card 2: Bill Analysis (hero card with stat) -->
+    <div class="bento-card col-span-4 row-span-2" style="background: linear-gradient(160deg, rgba(99,102,241,0.16) 0%, rgba(16,185,129,0.10) 100%); border-color: rgba(99,102,241,0.35);">
+      <div class="ghost-num" data-decor aria-hidden="true" style="color: rgba(255,255,255,0.04);">02</div>
+      <div class="flex items-start justify-between">
+        <div class="icon-wrap accent"><span class="material-icons" style="color: var(--accent-soft); font-size: 20px;">receipt_long</span></div>
+        <span class="chip chip-accent" style="font-size: 10px; padding: 2px 8px;">Planning</span>
+      </div>
+      <div class="bento-title">Bills & Recurring Detection</div>
+      <div class="bento-sub">Recurring payments auto-identified from merchant cadence. Upcoming bills surfaced 7 days out with cash impact.</div>
+
+      <div style="margin-top: 18px; padding: 14px; border-radius: 12px; background: rgba(0,0,0,0.30); border: 1px solid var(--border);">
+        <div style="font-size: 11px; color: var(--text-lo); letter-spacing: 0.14em; text-transform: uppercase;">Avg. monthly recurring</div>
+        <div style="font-family: var(--font-num); font-weight: 800; font-size: 44px; line-height: 1; letter-spacing: -0.03em; color: var(--text-hi); margin-top: 4px;">$1,284</div>
+        <div style="font-size: 12px; color: var(--accent-soft); margin-top: 4px;">across 9 detected subscriptions</div>
+      </div>
+      <div>
+        <span class="view-pill">Planning</span>
+        <span class="view-pill">Transactions</span>
+      </div>
+    </div>
+
+    <!-- Card 3: Spending Insights -->
+    <div class="bento-card col-span-4 row-span-1">
+      <div class="ghost-num" data-decor aria-hidden="true">03</div>
+      <div class="flex items-start justify-between">
+        <div class="icon-wrap"><span class="material-icons" style="color: var(--primary-soft); font-size: 20px;">query_stats</span></div>
+        <span class="chip" style="font-size: 10px; padding: 2px 8px;">Insights</span>
+      </div>
+      <div class="bento-title">Spending Insights</div>
+      <div class="bento-sub">365-day heatmap, top-merchant concentration (HHI), seasonal decomposition, and weekly anomaly flags.</div>
+      <div>
+        <span class="view-pill">Insights</span>
+        <span class="view-pill">Analytics</span>
+      </div>
+    </div>
+
+    <!-- Card 4: Actionable Recommendations -->
+    <div class="bento-card col-span-4 row-span-1">
+      <div class="ghost-num" data-decor aria-hidden="true">04</div>
+      <div class="flex items-start justify-between">
+        <div class="icon-wrap accent"><span class="material-icons" style="color: var(--accent-soft); font-size: 20px;">tips_and_updates</span></div>
+        <span class="chip chip-accent" style="font-size: 10px; padding: 2px 8px;">Smart Insights</span>
+      </div>
+      <div class="bento-title">Actionable Recommendations</div>
+      <div class="bento-sub">Goal optimizer, debt-payoff planner, What-If simulator. Recommendations you can act on with one utterance.</div>
+      <div>
+        <span class="view-pill">Planning</span>
+        <span class="view-pill">Innovation Lab</span>
+      </div>
+    </div>
+
+    <!-- Card 5: Goals & Planning (full-width bottom) -->
+    <div class="bento-card col-span-8 row-span-1">
+      <div class="ghost-num" data-decor aria-hidden="true">05</div>
+      <div class="flex items-start justify-between">
+        <div class="icon-wrap"><span class="material-icons" style="color: var(--primary-soft); font-size: 20px;">flag</span></div>
+        <span class="chip" style="font-size: 10px; padding: 2px 8px;">Goals · Analytics</span>
+      </div>
+      <div class="bento-title">Goals, Forecasting & Analytics</div>
+      <div class="bento-sub">Goal optimizer re-balances monthly contributions. Cash-flow forecast uses Holt-Winters; 5-year projection runs 5,000 Monte Carlo paths. Financial Health Score blends savings rate, debt ratio, emergency runway, and consistency into a single 0–100 score.</div>
+      <div>
+        <span class="view-pill">Goals</span>
+        <span class="view-pill">Planning</span>
+        <span class="view-pill">Insights</span>
+        <span class="view-pill">Analytics</span>
+        <span class="view-pill">Innovation Lab</span>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="deck-foot"><span><span class="dot"></span>FinWise · Topic A</span><span>05 / 12</span></div>
+
+</div>
+
+<aside data-notes class="hidden">
+FinWise ships eight user-facing views organized into four pillars. Smart budgeting auto-builds envelopes from your transaction history and flags category drift before it becomes a problem. Bill analysis detects recurring payments from merchant cadence — the average FinWise user is surprised to find around twelve hundred dollars a month across nine subscriptions they had forgotten about. Spending insights pair a 365-day heatmap with merchant-concentration analysis using the Herfindahl-Hirschman Index, plus seasonal decomposition. Actionable recommendations close the loop: the goal optimizer, debt-payoff planner, and What-If simulator don't just suggest — they offer one-utterance execution. The bottom card shows the analytics pillar: Holt-Winters forecasting, five-year Monte Carlo with five thousand paths, and the Financial Health Score that blends savings rate, debt ratio, emergency runway, and consistency into a single number.
+</aside>
+</body>
+</html>

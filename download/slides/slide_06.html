@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FinWise — Agent Capabilities</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<link rel="stylesheet" href="global.css">
+<style>
+  .h1 { font-family: var(--font-heading); font-weight: 700; font-size: 38px; line-height: 1.05; letter-spacing: -0.025em; }
+  .eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--primary-soft); }
+
+  /* Chat bubbles */
+  .bubble { border-radius: 12px; padding: 8px 12px; max-width: 90%; font-size: 13px; line-height: 1.4; }
+  .bubble.user { background: rgba(99,102,241,0.18); color: var(--text-hi); border: 1px solid rgba(99,102,241,0.32); align-self: flex-end; }
+  .bubble.agent { background: var(--bg-elev-2); color: var(--text-hi); border: 1px solid var(--border); align-self: flex-start; }
+  .bubble.agent .meta { font-size: 10px; color: var(--accent-soft); font-family: var(--font-mono); margin-bottom: 2px; letter-spacing: 0.06em; }
+
+  /* Compact tool cells */
+  .tool-cell { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 6px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; }
+  .tool-cell .badge { font-size: 8px; padding: 1px 5px; border-radius: 3px; font-weight: 700; letter-spacing: 0.08em; }
+  .badge.read { background: rgba(99,102,241,0.18); color: var(--primary-soft); }
+  .badge.write { background: rgba(16,185,129,0.18); color: var(--accent-soft); }
+</style>
+</head>
+<body>
+<div class="slide bg-grid relative">
+
+  <!-- Header -->
+  <div class="absolute left-[64px] right-[64px] top-[36px] flex justify-between items-center">
+    <div class="flex items-center gap-3">
+      <span class="chip">06 · Agent</span>
+      <span style="font-size: 12px; color: var(--text-lo); letter-spacing: 0.14em; text-transform: uppercase;">Natural language → 11 tools</span>
+    </div>
+    <div style="font-size: 12px; color: var(--text-lo); letter-spacing: 0.14em; text-transform: uppercase;">FinWise · Personal Finance Intelligence</div>
+  </div>
+
+  <!-- Title -->
+  <div class="absolute left-[64px] right-[64px] top-[74px]">
+    <div class="eyebrow mb-1">Agent Capabilities</div>
+    <h1 class="h1 text-white">Say it. The agent <span style="font-style: italic; color: var(--accent-soft); font-weight: 500;">does it.</span></h1>
+  </div>
+
+  <!-- Body: 7-5 split — chat mockup left, tool inventory right -->
+  <div class="absolute left-[64px] right-[64px] top-[170px] bottom-[68px] grid grid-cols-12 gap-5">
+
+    <!-- LEFT: chat mockup -->
+    <div class="col-span-7 card-elev p-4 flex flex-col">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <span class="material-icons" style="color: var(--primary-soft); font-size: 16px;">forum</span>
+          <span style="font-size: 12px; font-weight: 600; color: var(--text-hi);">Live agent transcript</span>
+        </div>
+        <span style="font-size: 10px; color: var(--text-lo); font-family: var(--font-mono);">supervisor → worker · ledger</span>
+      </div>
+
+      <div class="flex flex-col gap-1.5 flex-1 overflow-hidden">
+        <div class="bubble user">I spent $42 on groceries at Trader Joe's.</div>
+        <div class="bubble agent">
+          <div class="meta">tool_call · add_transaction · write</div>
+          Logged $42.00 → Groceries · Trader Joe's. Budget envelope now 68% used ($272 / $400).
+        </div>
+
+        <div class="bubble user">Create a goal to save $3,000 for a Japan trip by December.</div>
+        <div class="bubble agent">
+          <div class="meta">tool_call · create_goal · write</div>
+          Goal "Japan Trip" created. Suggested monthly contribution: <span style="color: var(--accent-soft); font-weight: 600;">$428</span> over 7 months.
+        </div>
+
+        <div class="bubble user">Raise my dining budget to $350.</div>
+        <div class="bubble agent">
+          <div class="meta">tool_call · update_budget · write</div>
+          Dining updated: $300 → $350. Reallocated from Groceries surplus. Logged in audit trail.
+        </div>
+      </div>
+
+      <div style="margin-top: 8px; padding: 7px 10px; border-radius: 8px; background: rgba(16,185,129,0.10); border: 1px solid rgba(16,185,129,0.28); display: flex; align-items: center; gap: 8px;">
+        <span class="material-icons" style="color: var(--accent-soft); font-size: 16px;">verified</span>
+        <span style="font-size: 11px; color: var(--text-mid);">All write tools audited · reversible · permission-gated</span>
+      </div>
+    </div>
+
+    <!-- RIGHT: tool inventory -->
+    <div class="col-span-5 flex flex-col gap-2.5">
+      <div class="card p-3">
+        <div class="flex items-center justify-between">
+          <div>
+            <div style="font-size: 10px; color: var(--text-lo); letter-spacing: 0.14em; text-transform: uppercase;">Tool inventory</div>
+            <div style="font-family: var(--font-heading); font-weight: 700; font-size: 16px; color: var(--text-hi);">11 verified tools</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-family: var(--font-num); font-weight: 800; font-size: 24px; color: var(--primary-soft); line-height: 1;">7</div>
+            <div style="font-size: 9px; color: var(--text-lo); letter-spacing: 0.1em; text-transform: uppercase;">read</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-family: var(--font-num); font-weight: 800; font-size: 24px; color: var(--accent-soft); line-height: 1;">4</div>
+            <div style="font-size: 9px; color: var(--text-lo); letter-spacing: 0.1em; text-transform: uppercase;">write</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card p-3 flex-1 flex flex-col gap-1.5">
+        <div style="font-size: 10px; color: var(--text-lo); letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 2px;">Read tools · query surface</div>
+        <div class="grid grid-cols-2 gap-1.5">
+          <div class="tool-cell"><span class="badge read">R</span><span>get_transactions</span></div>
+          <div class="tool-cell"><span class="badge read">R</span><span>get_budgets</span></div>
+          <div class="tool-cell"><span class="badge read">R</span><span>get_goals</span></div>
+          <div class="tool-cell"><span class="badge read">R</span><span>get_health_score</span></div>
+          <div class="tool-cell"><span class="badge read">R</span><span>get_cashflow_forecast</span></div>
+          <div class="tool-cell"><span class="badge read">R</span><span>get_analytics</span></div>
+          <div class="tool-cell col-span-2"><span class="badge read">R</span><span>get_insights</span></div>
+        </div>
+
+        <div style="font-size: 10px; color: var(--text-lo); letter-spacing: 0.14em; text-transform: uppercase; margin: 4px 0 2px 0;">Write tools · action surface</div>
+        <div class="grid grid-cols-2 gap-1.5">
+          <div class="tool-cell"><span class="badge write">W</span><span>add_transaction</span></div>
+          <div class="tool-cell"><span class="badge write">W</span><span>create_goal</span></div>
+          <div class="tool-cell"><span class="badge write">W</span><span>update_budget</span></div>
+          <div class="tool-cell"><span class="badge write">W</span><span>set_permission</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="deck-foot"><span><span class="dot"></span>FinWise · Topic A</span><span>06 / 12</span></div>
+
+</div>
+
+<aside data-notes class="hidden">
+This is the agent in action. The chat on the left is a real transcript from our demo. The user says, "I spent forty-two dollars on groceries at Trader Joe's." The supervisor parses the intent, plans the call, dispatches to the ledger worker, which calls add_transaction. The transaction is logged, the budget envelope is updated, and the agent responds with the new context — all in well under a second. The same pattern holds for creating goals and updating budgets. Every write tool is permissioned, audited, and reversible. On the right you see the full tool inventory: eleven tools, split seven read and four write. Read tools query the ledger, budgets, goals, health score, forecasts, analytics, and insights. Write tools add transactions, create goals, update budgets, and set permissions. This is the surface area the agent can reason over.
+</aside>
+</body>
+</html>

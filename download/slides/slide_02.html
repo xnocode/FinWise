@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FinWise — The Problem</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<link rel="stylesheet" href="global.css">
+<style>
+  .h1 { font-family: var(--font-heading); font-weight: 700; font-size: 56px; line-height: 1.05; letter-spacing: -0.025em; }
+  .eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--primary-soft); }
+  .stat-mega { font-family: var(--font-num); font-weight: 800; font-size: 96px; line-height: 0.95; letter-spacing: -0.04em; }
+  .stat-mid { font-family: var(--font-num); font-weight: 700; font-size: 56px; line-height: 1; letter-spacing: -0.03em; }
+</style>
+</head>
+<body>
+<div class="slide bg-grid relative">
+
+  <!-- Header strip -->
+  <div class="absolute left-[64px] right-[64px] top-[44px] flex justify-between items-center">
+    <div class="flex items-center gap-3">
+      <span class="chip">02 · Problem</span>
+      <span style="font-size: 12px; color: var(--text-lo); letter-spacing: 0.14em; text-transform: uppercase;">Why personal finance is hard</span>
+    </div>
+    <div style="font-size: 12px; color: var(--text-lo); letter-spacing: 0.14em; text-transform: uppercase;">FinWise · Personal Finance Intelligence</div>
+  </div>
+
+  <!-- Two-column body -->
+  <div class="absolute left-[64px] right-[64px] top-[110px] bottom-[80px] grid grid-cols-12 gap-8">
+
+    <!-- LEFT: narrative -->
+    <div class="col-span-6 flex flex-col">
+      <div class="eyebrow mb-3">The Gap</div>
+      <h1 class="h1 text-white">Money is easy to <span style="font-style: italic; color: var(--primary-soft); font-weight: 500;">track.</span><br>Hard to <span style="font-style: italic; color: var(--accent-soft); font-weight: 500;">manage.</span></h1>
+
+      <div class="divider mt-6 mb-6"></div>
+
+      <p style="font-size: 17px; line-height: 1.6; color: var(--text-mid);">
+        Existing apps are <span style="color: var(--text-hi); font-weight: 600;">passive dashboards</span>. They render charts of what already happened — they don't reason, don't plan, and don't act. Users are left to do the cognitive work themselves: categorize, forecast, decide, and follow through.
+      </p>
+
+      <div class="mt-6 space-y-3">
+        <div class="flex items-start gap-3">
+          <span class="material-icons" style="color: var(--danger); font-size: 20px; margin-top: 2px;">remove_circle_outline</span>
+          <div>
+            <div style="font-size: 15px; font-weight: 600; color: var(--text-hi);">Manual categorization drifts</div>
+            <div style="font-size: 13px; color: var(--text-mid); line-height: 1.5;">Rules break; budgets silently leak.</div>
+          </div>
+        </div>
+        <div class="flex items-start gap-3">
+          <span class="material-icons" style="color: var(--danger); font-size: 20px; margin-top: 2px;">remove_circle_outline</span>
+          <div>
+            <div style="font-size: 15px; font-weight: 600; color: var(--text-hi);">Forecasts are absent or naive</div>
+            <div style="font-size: 13px; color: var(--text-mid); line-height: 1.5;">No cash-flow projection, no scenario testing.</div>
+          </div>
+        </div>
+        <div class="flex items-start gap-3">
+          <span class="material-icons" style="color: var(--danger); font-size: 20px; margin-top: 2px;">remove_circle_outline</span>
+          <div>
+            <div style="font-size: 15px; font-weight: 600; color: var(--text-hi);">No safe actions, only suggestions</div>
+            <div style="font-size: 13px; color: var(--text-mid); line-height: 1.5;">You read advice. Then you do all the work.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: 3 hard stats stacked -->
+    <div class="col-span-6 flex flex-col gap-4">
+      <div class="card-elev p-6 flex-1 flex flex-col justify-between" style="border-color: rgba(244,63,94,0.18);">
+        <div class="flex items-start justify-between">
+          <div style="font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-lo);">Living paycheck to paycheck</div>
+          <span class="material-icons" style="color: var(--danger); font-size: 22px;">trending_down</span>
+        </div>
+        <div>
+          <div class="stat-mega" style="color: var(--danger);">70<span style="font-size: 56px; color: var(--text-mid);">%</span></div>
+          <div style="font-size: 13px; color: var(--text-mid); margin-top: 6px;">of Americans — including many in higher income brackets.</div>
+        </div>
+        <div style="font-size: 11px; color: var(--text-faint); font-family: var(--font-mono);">Source: LendingClub · PYMNTS report, 2024</div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4 flex-1">
+        <div class="card-elev p-5 flex flex-col justify-between">
+          <div style="font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-lo);">Cite finance stress</div>
+          <div class="stat-mid" style="color: var(--warn);">72<span style="font-size: 32px; color: var(--text-mid);">%</span></div>
+          <div style="font-size: 12px; color: var(--text-mid); line-height: 1.4;">of adults say money is a significant stressor.</div>
+        </div>
+        <div class="card-elev p-5 flex flex-col justify-between">
+          <div style="font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-lo);">Use a budget</div>
+          <div class="stat-mid" style="color: var(--primary-soft);">32<span style="font-size: 32px; color: var(--text-mid);">%</span></div>
+          <div style="font-size: 12px; color: var(--text-mid); line-height: 1.4;">maintain a household budget at all.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="deck-foot"><span><span class="dot"></span>FinWise · Topic A</span><span>02 / 12</span></div>
+
+</div>
+
+<aside data-notes class="hidden">
+Let's start with the problem. Personal finance is a domain where the tools are abundant but the outcomes are poor. Seventy percent of Americans live paycheck to paycheck — that includes many in higher income brackets, which tells you this is not an income problem, it's a management problem. Seventy-two percent of adults report money as a primary stressor, yet only thirty-two percent maintain any kind of household budget. The gap between intention and execution is enormous. Why? Because today's apps are passive. They are dashboards that show you what already happened, then leave you to do the hard part: categorize correctly, forecast the future, choose between competing goals, and actually follow through. FinWise closes that gap by making the agent an active participant in your financial life.
+</aside>
+</body>
+</html>

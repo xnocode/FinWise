@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FinWise — Security & Compliance</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<link rel="stylesheet" href="global.css">
+<style>
+  .h1 { font-family: var(--font-heading); font-weight: 700; font-size: 40px; line-height: 1.05; letter-spacing: -0.025em; }
+  .eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--primary-soft); }
+  .role-card { background: var(--bg-elev-1); border: 1px solid var(--border); border-radius: 14px; padding: 14px; }
+  .role-card.active { border-color: rgba(99,102,241,0.4); background: linear-gradient(160deg, rgba(99,102,241,0.10) 0%, var(--bg-elev-1) 60%); }
+  .role-name { font-family: var(--font-heading); font-weight: 700; font-size: 18px; color: var(--text-hi); }
+  .role-perm { font-size: 11px; color: var(--text-mid); margin-top: 6px; line-height: 1.5; }
+  .perm-tag { font-family: var(--font-mono); font-size: 10px; padding: 2px 6px; border-radius: 4px; display: inline-block; margin-right: 4px; margin-top: 4px; }
+  .perm-tag.yes { background: rgba(16,185,129,0.16); color: var(--accent-soft); border: 1px solid rgba(16,185,129,0.28); }
+  .perm-tag.no { background: rgba(244,63,94,0.10); color: var(--danger); border: 1px solid rgba(244,63,94,0.22); }
+  .reg-badge { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--bg-elev-1); border: 1px solid var(--border); }
+  .reg-badge .reg-mark { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: rgba(99,102,241,0.16); color: var(--primary-soft); font-family: var(--font-mono); font-weight: 800; font-size: 11px; letter-spacing: 0.04em; }
+</style>
+</head>
+<body>
+<div class="slide bg-grid relative">
+
+  <!-- Header -->
+  <div class="absolute left-[64px] right-[64px] top-[36px] flex justify-between items-center">
+    <div class="flex items-center gap-3">
+      <span class="chip">09 · Security</span>
+      <span style="font-size: 12px; color: var(--text-lo); letter-spacing: 0.14em; text-transform: uppercase;">3-tier permissions · audit · privacy mode</span>
+    </div>
+    <div style="font-size: 12px; color: var(--text-lo); letter-spacing: 0.14em; text-transform: uppercase;">FinWise · Personal Finance Intelligence</div>
+  </div>
+
+  <!-- Title -->
+  <div class="absolute left-[64px] right-[64px] top-[78px]">
+    <div class="eyebrow mb-2">Security & Compliance</div>
+    <h1 class="h1 text-white">An agentic system has to be <span style="font-style: italic; color: var(--accent-soft); font-weight: 500;">trustworthy by design.</span></h1>
+  </div>
+
+  <!-- Body: 7-5 split -->
+  <div class="absolute left-[64px] right-[64px] top-[180px] bottom-[80px] grid grid-cols-12 gap-5">
+
+    <!-- LEFT: 3-tier permission model -->
+    <div class="col-span-7 flex flex-col gap-3">
+      <div style="font-size: 11px; color: var(--text-lo); letter-spacing: 0.14em; text-transform: uppercase;">3-tier permission model</div>
+
+      <div class="grid grid-cols-3 gap-3">
+        <div class="role-card">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="material-icons" style="color: var(--text-mid); font-size: 18px;">visibility</span>
+            <span class="role-name">Viewer</span>
+          </div>
+          <div class="role-perm">Read-only access. Cannot invoke write tools.</div>
+          <div>
+            <span class="perm-tag yes">READ</span>
+            <span class="perm-tag no">WRITE</span>
+          </div>
+        </div>
+        <div class="role-card active">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="material-icons" style="color: var(--primary-soft); font-size: 18px;">edit</span>
+            <span class="role-name">Editor</span>
+          </div>
+          <div class="role-perm">Adds transactions, updates budgets, manages goals.</div>
+          <div>
+            <span class="perm-tag yes">READ</span>
+            <span class="perm-tag yes">WRITE</span>
+            <span class="perm-tag no">PERMS</span>
+          </div>
+        </div>
+        <div class="role-card">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="material-icons" style="color: var(--accent-soft); font-size: 18px;">verified_user</span>
+            <span class="role-name">Approver</span>
+          </div>
+          <div class="role-perm">All editor rights + permission grants + audit review.</div>
+          <div>
+            <span class="perm-tag yes">READ</span>
+            <span class="perm-tag yes">WRITE</span>
+            <span class="perm-tag yes">PERMS</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Privacy mode + Audit trail -->
+      <div class="grid grid-cols-2 gap-3 mt-1">
+        <div class="card p-4">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="material-icons" style="color: var(--primary-soft); font-size: 18px;">lock</span>
+            <span style="font-family: var(--font-heading); font-weight: 700; font-size: 15px; color: var(--text-hi);">Privacy Mode</span>
+          </div>
+          <div style="font-size: 12px; color: var(--text-mid); line-height: 1.5;">One-toggles mask sensitive balances, merchant names, and goal amounts on shared screens. Default ON for demos.</div>
+        </div>
+        <div class="card p-4">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="material-icons" style="color: var(--accent-soft); font-size: 18px;">history</span>
+            <span style="font-family: var(--font-heading); font-weight: 700; font-size: 15px; color: var(--text-hi);">Audit Trail</span>
+          </div>
+          <div style="font-size: 12px; color: var(--text-mid); line-height: 1.5;">Every write tool call is logged with actor, tool, payload diff, and timestamp. Searchable & exportable.</div>
+        </div>
+      </div>
+
+      <!-- Risk register -->
+      <div class="card p-4 mt-1">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-2">
+            <span class="material-icons" style="color: var(--warn); font-size: 18px;">shield</span>
+            <span style="font-family: var(--font-heading); font-weight: 700; font-size: 15px; color: var(--text-hi);">Risk Register · Top 3 mitigations</span>
+          </div>
+          <span style="font-size: 10px; color: var(--text-lo); font-family: var(--font-mono);">live</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; font-size: 11px;">
+          <div>
+            <div style="color: var(--accent-soft); font-family: var(--font-mono); font-weight: 600;">MITIGATED</div>
+            <div style="color: var(--text-mid); margin-top: 2px; line-height: 1.4;">Hallucinated writes → tool schemas + supervisor validation</div>
+          </div>
+          <div>
+            <div style="color: var(--accent-soft); font-family: var(--font-mono); font-weight: 600;">MITIGATED</div>
+            <div style="color: var(--text-mid); margin-top: 2px; line-height: 1.4;">Privilege escalation → permission check at tool boundary</div>
+          </div>
+          <div>
+            <div style="color: var(--warn); font-family: var(--font-mono); font-weight: 600;">MONITORED</div>
+            <div style="color: var(--text-mid); margin-top: 2px; line-height: 1.4;">PII in LLM context → redaction layer + retention limits</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: compliance + audit log mock -->
+    <div class="col-span-5 flex flex-col gap-3">
+      <div style="font-size: 11px; color: var(--text-lo); letter-spacing: 0.14em; text-transform: uppercase;">Regulatory alignment</div>
+
+      <div class="grid grid-cols-1 gap-2">
+        <div class="reg-badge">
+          <div class="reg-mark">GDPR</div>
+          <div>
+            <div style="font-size: 13px; font-weight: 600; color: var(--text-hi);">EU General Data Protection Regulation</div>
+            <div style="font-size: 11px; color: var(--text-mid);">Right to access, rectify, erase. Data export & delete built in.</div>
+          </div>
+        </div>
+        <div class="reg-badge">
+          <div class="reg-mark">CCPA</div>
+          <div>
+            <div style="font-size: 13px; font-weight: 600; color: var(--text-hi);">California Consumer Privacy Act</div>
+            <div style="font-size: 11px; color: var(--text-mid);">"Do Not Sell" toggle, full data portability, opt-out of sharing.</div>
+          </div>
+        </div>
+        <div class="reg-badge">
+          <div class="reg-mark">PIPL</div>
+          <div>
+            <div style="font-size: 13px; font-weight: 600; color: var(--text-hi);">China PIPL — Personal Information Protection Law</div>
+            <div style="font-size: 11px; color: var(--text-mid);">Consent management, cross-border transfer disclosure.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live audit log mock -->
+      <div class="card-elev p-4 flex-1">
+        <div class="flex items-center justify-between mb-2">
+          <div style="font-size: 11px; color: var(--text-lo); letter-spacing: 0.14em; text-transform: uppercase;">Audit trail · live</div>
+          <span style="font-size: 10px; color: var(--accent-soft); font-family: var(--font-mono); display: inline-flex; align-items: center; gap: 4px;"><span style="width: 6px; height: 6px; border-radius: 999px; background: var(--accent); display: inline-block;"></span>streaming</span>
+        </div>
+        <div style="font-family: var(--font-mono); font-size: 11px; line-height: 1.7; color: var(--text-mid);">
+          <div><span style="color: var(--text-lo);">14:02:11</span> <span style="color: var(--accent-soft);">add_transaction</span> · $42 · Groceries</div>
+          <div><span style="color: var(--text-lo);">14:02:11</span> <span style="color: var(--primary-soft);">supervisor</span> · plan → 1 tool</div>
+          <div><span style="color: var(--text-lo);">14:02:12</span> <span style="color: var(--accent-soft);">create_goal</span> · Japan Trip · $3,000</div>
+          <div><span style="color: var(--text-lo);">14:02:12</span> <span style="color: var(--primary-soft);">supervisor</span> · plan → 1 tool</div>
+          <div><span style="color: var(--text-lo);">14:02:13</span> <span style="color: var(--accent-soft);">update_budget</span> · Dining $300→$350</div>
+          <div><span style="color: var(--text-lo);">14:02:13</span> <span style="color: var(--primary-soft);">approver</span> · auto-approved</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="deck-foot"><span><span class="dot"></span>FinWise · Topic A</span><span>09 / 12</span></div>
+
+</div>
+
+<aside data-notes class="hidden">
+An agentic system that can write to your financial life has to be trustworthy by design. We built three layers of defense. First, a three-tier permission model: Viewers can read, Editors can read and write, Approvers additionally grant permissions and review the audit trail. Every tool call is checked at the boundary — there is no privilege escalation path. Second, privacy mode masks sensitive balances, merchant names, and goal amounts in one toggle, default-on for shared screens. Third, every write tool call is logged with actor, tool, payload diff, and timestamp, in a searchable, exportable audit trail shown live on the right. On compliance: FinWise supports GDPR right-to-access, rectify, and erase; CCPA do-not-sell and data portability; and PIPL consent and cross-border transfer disclosure. The risk register tracks our top three mitigations, including hallucinated writes, privilege escalation, and PII in LLM context.
+</aside>
+</body>
+</html>

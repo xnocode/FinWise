@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FinWise — The Solution</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<link rel="stylesheet" href="global.css">
+<style>
+  .h1 { font-family: var(--font-heading); font-weight: 700; font-size: 60px; line-height: 1.04; letter-spacing: -0.028em; }
+  .eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--primary-soft); }
+  .compare-row { display: grid; grid-template-columns: 1fr 24px 1fr; gap: 12px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--border); }
+  .compare-row:last-child { border-bottom: 0; }
+  .compare-row .label { font-size: 12px; color: var(--text-lo); letter-spacing: 0.12em; text-transform: uppercase; }
+  .compare-row .left { font-size: 14px; color: var(--text-mid); font-family: var(--font-mono); }
+  .compare-row .right { font-size: 14px; color: var(--text-hi); font-weight: 600; }
+  .compare-row .arrow { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="slide bg-grid bg-glow relative">
+
+  <!-- Header -->
+  <div class="absolute left-[64px] right-[64px] top-[44px] flex justify-between items-center">
+    <div class="flex items-center gap-3">
+      <span class="chip">03 · Solution</span>
+      <span style="font-size: 12px; color: var(--text-lo); letter-spacing: 0.14em; text-transform: uppercase;">From dashboard to copilot</span>
+    </div>
+    <div style="font-size: 12px; color: var(--text-lo); letter-spacing: 0.14em; text-transform: uppercase;">FinWise · Personal Finance Intelligence</div>
+  </div>
+
+  <!-- Body -->
+  <div class="absolute left-[64px] right-[64px] top-[110px] bottom-[80px] grid grid-cols-12 gap-8">
+
+    <!-- LEFT: message -->
+    <div class="col-span-7 flex flex-col justify-center">
+      <div class="eyebrow mb-3">The Solution</div>
+      <h1 class="h1 text-white">
+        An <span style="font-style: italic; color: var(--primary-soft); font-weight: 500;">agentic</span> copilot<br>
+        that <span style="font-style: italic; color: var(--accent-soft); font-weight: 500;">reasons</span>,<br>
+        not just records.
+      </h1>
+
+      <div class="divider mt-7 mb-6"></div>
+
+      <p style="font-size: 18px; line-height: 1.6; color: var(--text-mid); max-width: 640px;">
+        FinWise pairs an LLM-driven agent with a four-layer finance engine. You speak in plain English; it understands intent, calls <span style="color: var(--text-hi); font-weight: 600;">11 verified tools</span> across read and write surfaces, and acts inside a permissioned, audited sandbox.
+      </p>
+
+      <div class="mt-7 grid grid-cols-3 gap-3">
+        <div class="card p-4">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="material-icons" style="color: var(--primary-soft); font-size: 18px;">chat</span>
+            <span style="font-size: 11px; color: var(--text-lo); letter-spacing: 0.12em; text-transform: uppercase;">Converse</span>
+          </div>
+          <div style="font-size: 13px; color: var(--text-hi); font-weight: 600; line-height: 1.4;">Natural language in, structured finance out.</div>
+        </div>
+        <div class="card p-4">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="material-icons" style="color: var(--primary-soft); font-size: 18px;">smart_toy</span>
+            <span style="font-size: 11px; color: var(--text-lo); letter-spacing: 0.12em; text-transform: uppercase;">Reason</span>
+          </div>
+          <div style="font-size: 13px; color: var(--text-hi); font-weight: 600; line-height: 1.4;">Supervisor routes; workers call tools.</div>
+        </div>
+        <div class="card p-4">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="material-icons" style="color: var(--accent-soft); font-size: 18px;">bolt</span>
+            <span style="font-size: 11px; color: var(--text-lo); letter-spacing: 0.12em; text-transform: uppercase;">Act</span>
+          </div>
+          <div style="font-size: 13px; color: var(--text-hi); font-weight: 600; line-height: 1.4;">Write tools mutate state safely.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: before/after comparison card -->
+    <div class="col-span-5 flex items-center">
+      <div class="card-elev w-full p-6">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <div style="font-size: 11px; color: var(--text-lo); letter-spacing: 0.16em; text-transform: uppercase;">Old world → FinWise</div>
+            <div style="font-family: var(--font-heading); font-weight: 700; font-size: 22px; margin-top: 2px;">Passive → Active</div>
+          </div>
+          <span class="material-icons" style="color: var(--accent); font-size: 32px;">auto_awesome</span>
+        </div>
+
+        <div class="compare-row">
+          <div>
+            <div class="label">Logs a transaction</div>
+            <div class="left">You type it into a form</div>
+          </div>
+          <span class="material-icons arrow" style="font-size: 18px;">arrow_forward</span>
+          <div class="right">"I spent $42 at Trader Joe's"</div>
+        </div>
+        <div class="compare-row">
+          <div>
+            <div class="label">Builds a budget</div>
+            <div class="left">You estimate categories</div>
+          </div>
+          <span class="material-icons arrow" style="font-size: 18px;">arrow_forward</span>
+          <div class="right">Inferred from 550+ transactions</div>
+        </div>
+        <div class="compare-row">
+          <div>
+            <div class="label">Forecasts cash flow</div>
+            <div class="left">Not available</div>
+          </div>
+          <span class="material-icons arrow" style="font-size: 18px;">arrow_forward</span>
+          <div class="right">Holt-Winters · 90-day outlook</div>
+        </div>
+        <div class="compare-row">
+          <div>
+            <div class="label">Tests a what-if</div>
+            <div class="left">Spreadsheet modeling</div>
+          </div>
+          <span class="material-icons arrow" style="font-size: 18px;">arrow_forward</span>
+          <div class="right">5,000 Monte Carlo paths</div>
+        </div>
+        <div class="compare-row">
+          <div>
+            <div class="label">Acts on advice</div>
+            <div class="left">You do all the work</div>
+          </div>
+          <span class="material-icons arrow" style="font-size: 18px;">arrow_forward</span>
+          <div class="right">Agent writes inside audit trail</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="deck-foot"><span><span class="dot"></span>FinWise · Topic A</span><span>03 / 12</span></div>
+
+</div>
+
+<aside data-notes class="hidden">
+Our solution is structural, not cosmetic. We didn't bolt a chat box onto a budgeting app. We built a four-layer finance engine — ingestion, categorization, agent, insight — and placed an LLM supervisor at the top. The supervisor understands intent and routes to worker agents that call one of eleven verified tools. Seven tools are read-only: they query transactions, goals, budgets, and analytics. Four are write tools: they add transactions, create goals, update budgets, and so on — every one of them inside a permissioned, audited sandbox. The right-hand panel is the simplest way to understand the shift. In the old world you typed transactions into a form. In FinWise you just say "I spent forty-two dollars at Trader Joe's." The agent parses, categorizes, persists, and updates the affected budget envelope — automatically.
+</aside>
+</body>
+</html>
