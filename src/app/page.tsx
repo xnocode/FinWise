@@ -134,7 +134,7 @@ export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: 'assistant',
-      content: "Welcome to FinWise. I'm your AI finance copilot — I analyze transactions, monitor budgets, run simulations, and surface recommendations. Ask me anything or try a suggested prompt below.",
+      content: "Welcome to FinWise. I'm your AI finance copilot — I can **add transactions**, **create goals**, **update budgets**, and answer any financial question. Try \"I spent $50 on coffee at Blue Bottle\" or ask \"How did this month go?\"",
       mode: 'quick_qa',
     },
   ])
@@ -292,6 +292,19 @@ export default function Home() {
       const d = await res.json()
       if (d.ok) {
         setMessages([...newMsgs, { role: 'assistant', content: d.response, mode: d.mode, toolCalls: d.toolCalls }])
+        // If the agent modified data, refresh dashboard + show toast
+        if (d.dataChanged) {
+          toast.success('Data updated via agent', {
+            description: 'Refreshing your dashboard...',
+          })
+          // Invalidate analytics + planning cache so they recompute next visit
+          setAnalytics(null)
+          setDebtData(null)
+          setBillsData(null)
+          setSmartInsights(null)
+          setInnovationData(null)
+          await loadDashboard()
+        }
       } else {
         setMessages([...newMsgs, { role: 'assistant', content: `Error: ${d.error || 'unknown'}` }])
       }
@@ -304,10 +317,10 @@ export default function Home() {
   }
 
   const quickPrompts = [
+    { label: 'Add expense', text: 'I spent $42 on groceries at Trader Joe\'s' },
+    { label: 'Create goal', text: 'Create a goal to save $8000 for a vacation' },
     { label: 'Monthly review', text: 'How did this month go?' },
-    { label: 'Spending anomaly', text: 'Why did I overspend this month?' },
-    { label: 'Run simulation', text: 'If I cut dining by 20%, when can I afford the Japan trip?' },
-    { label: 'Cancel subscriptions', text: 'Which subscriptions should I cancel?' },
+    { label: 'Update budget', text: 'Set my dining budget to $400' },
   ]
 
   const fileInputRef = useRef<HTMLInputElement>(null)

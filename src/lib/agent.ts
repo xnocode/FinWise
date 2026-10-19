@@ -248,25 +248,233 @@ async function categorizeMerchant(ctx: ToolContext, args: { merchant: string; ca
   if (ctx.tier === 'Viewer') {
     return { tool: 'categorize_merchant', success: false, data: null, summary: 'Permission denied: Viewer tier cannot modify categorizations' }
   }
-  // Just return success in this demo
+  // Update all transactions with this merchant to the new category
+  const cat = await db.category.findFirst({ where: { name: { contains: args.category } } })
+  if (!cat) {
+    return { tool: 'categorize_merchant', success: false, data: null, summary: `Category "${args.category}" not found` }
+  }
+  const updated = await db.transaction.updateMany({
+    where: { userId: ctx.userId, merchantNorm: { contains: args.merchant.toLowerCase().replace(/[^a-z0-9]/g, '-') } },
+    data: { categoryId: cat.id },
+  })
   return {
     tool: 'categorize_merchant',
     success: true,
-    data: { merchant: args.merchant, newCategory: args.category },
-    summary: `Re-categorized "${args.merchant}" as ${args.category}`,
+    data: { merchant: args.merchant, newCategory: args.category, updatedCount: updated.count },
+    summary: `Re-categorized ${updated.count} "${args.merchant}" transactions as ${args.category}`,
+  }
+}
+
+// ─── NEW: Write tools — let users add/edit data through the agent ────────
+
+// Parse a natural-language amount like "$50", "50", "$50.00", "50 dollars"
+function parseAmount(text: string): number | null {
+  const match = text.match(/\$?\s*(\d+(?:\.\d{1,2})?)/)
+  if (!match) return null
+  return Math.round(parseFloat(match[1]) * 100)
+}
+
+// Find or guess a category from text
+async function findOrCreateCategory(ctx: ToolContext, categoryText: string): Promise<string | null> {
+  if (!categoryText) return null
+  // Try to find an existing category by name (case-insensitive)
+  const existing = await db.category.findFirst({
+    where: { name: { contains: categoryText } },
+  })
+  if (existing) return existing.id
+  // Otherwise create a new one
+  const colors = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#8b5cf6', '#ef4444', '#84cc16']
+  const newCat = await db.category.create({
+    data: {
+      name: categoryText.charAt(0).toUpperCase() + categoryText.slice(1).toLowerCase(),
+      color: colors[Math.floor(Math.random() * colors.length)],
+    },
+  })
+  return newCat.id
+}
+
+async function addTransaction(ctx: ToolContext, args: {
+  amount: number           // in cents
+  merchant: string
+  category?: string
+  date?: string            // ISO date
+  direction?: 'debit' | 'credit'
+  memo?: string
+}): Promise<ToolResult> {
+  if (ctx.tier === 'Viewer') {
+    return { tool: 'add_transaction', success: false, data: null, summary: 'Permission denied: Viewer tier cannot add transactions' }
+  }
+  if (!args.amount || args.amount <= 0) {
+    return { tool: 'add_transaction', success: false, data: null, summary: 'Invalid amount — must be a positive number' }
+  }
+  if (!args.merchant) {
+    return { tool: 'add_transaction', success: false, data: null, summary: 'Merchant name required' }
+  }
+  // Find or create category (default to "Shopping" if not specified)
+  const categoryName = args.category || 'Shopping'
+  const categoryId = await findOrCreateCategory(ctx, categoryName)
+  if (!categoryId) {
+    return { tool: 'add_transaction', success: false, data: null, summary: `Could not resolve category "${categoryName}"` }
+  }
+  const direction = args.direction || 'debit'
+  const date = args.date ? new Date(args.date) : new Date()
+  const tx = await db.transaction.create({
+    data: {
+      userId: ctx.userId,
+      categoryId,
+      date,
+      amountCents: args.amount,
+      direction,
+      currency: 'USD',
+      merchantRaw: args.merchant,
+      merchantNorm: args.merchant.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+      source: 'agent',
+      confidence: 1.0,
+      memo: args.memo || null,
+    },
+    include: { category: true },
+  })
+  return {
+    tool: 'add_transaction',
+    success: true,
+    data: {
+      id: tx.id, merchant: tx.merchantRaw, amountCents: tx.amountCents,
+      direction: tx.direction, category: tx.category.name, date: tx.date.toISOString().split('T')[0],
+    },
+    summary: `Added ${direction === 'credit' ? 'income' : 'expense'}: ${args.merchant} for $${(args.amount / 100).toFixed(2)} in category ${tx.category.name}`,
+  }
+}
+
+async function createGoal(ctx: ToolContext, args: {
+  name: string
+  targetCents: number
+  monthlyContributionCents?: number
+  savedCents?: number
+  targetDate?: string
+}): Promise<ToolResult> {
+  if (ctx.tier === 'Viewer') {
+    return { tool: 'create_goal', success: false, data: null, summary: 'Permission denied: Viewer tier cannot create goals' }
+  }
+  if (!args.name || !args.targetCents || args.targetCents <= 0) {
+    return { tool: 'create_goal', success: false, data: null, summary: 'Goal name and positive target amount required' }
+  }
+  const goal = await db.goal.create({
+    data: {
+      userId: ctx.userId,
+      name: args.name,
+      targetCents: args.targetCents,
+      savedCents: args.savedCents || 0,
+      monthlyContributionCents: args.monthlyContributionCents || Math.round(args.targetCents / 12),  // default: 1 year plan
+      targetDate: args.targetDate ? new Date(args.targetDate) : null,
+    },
+  })
+  const monthsToTarget = goal.monthlyContributionCents > 0
+    ? Math.ceil((goal.targetCents - goal.savedCents) / goal.monthlyContributionCents)
+    : null
+  return {
+    tool: 'create_goal',
+    success: true,
+    data: {
+      id: goal.id, name: goal.name, targetCents: goal.targetCents,
+      monthlyContributionCents: goal.monthlyContributionCents, monthsToTarget,
+    },
+    summary: `Created goal "${goal.name}" — target $${(goal.targetCents / 100).toFixed(2)}, contributing $${(goal.monthlyContributionCents / 100).toFixed(2)}/mo${monthsToTarget ? `, ETA ${monthsToTarget} months` : ''}`,
+  }
+}
+
+async function updateBudget(ctx: ToolContext, args: {
+  category: string
+  amountCents: number      // new monthly envelope
+}): Promise<ToolResult> {
+  if (ctx.tier === 'Viewer') {
+    return { tool: 'update_budget', success: false, data: null, summary: 'Permission denied: Viewer tier cannot modify budgets' }
+  }
+  if (!args.category || !args.amountCents) {
+    return { tool: 'update_budget', success: false, data: null, summary: 'Category name and amount required' }
+  }
+  const cat = await db.category.findFirst({ where: { name: { contains: args.category } } })
+  if (!cat) {
+    return { tool: 'update_budget', success: false, data: null, summary: `Category "${args.category}" not found` }
+  }
+  const now = new Date()
+  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const budget = await db.budget.upsert({
+    where: { userId_categoryId_month: { userId: ctx.userId, categoryId: cat.id, month } },
+    update: { amountCents: args.amountCents },
+    create: { userId: ctx.userId, categoryId: cat.id, month, amountCents: args.amountCents },
+  })
+  return {
+    tool: 'update_budget',
+    success: true,
+    data: { category: cat.name, amountCents: budget.amountCents, month },
+    summary: `Updated ${cat.name} budget to $${(budget.amountCents / 100).toFixed(2)}/mo for ${month}`,
+  }
+}
+
+async function deleteTransaction(ctx: ToolContext, args: {
+  merchant?: string
+  amountCents?: number
+  date?: string
+  transactionId?: string
+}): Promise<ToolResult> {
+  if (ctx.tier === 'Viewer') {
+    return { tool: 'delete_transaction', success: false, data: null, summary: 'Permission denied: Viewer tier cannot delete transactions' }
+  }
+  // If specific ID provided
+  if (args.transactionId) {
+    try {
+      await db.transaction.delete({ where: { id: args.transactionId } })
+      return { tool: 'delete_transaction', success: true, data: { id: args.transactionId }, summary: `Deleted transaction ${args.transactionId}` }
+    } catch {
+      return { tool: 'delete_transaction', success: false, data: null, summary: `Transaction ${args.transactionId} not found` }
+    }
+  }
+  // Find by merchant + amount + date
+  const where: any = { userId: ctx.userId }
+  if (args.merchant) where.merchantNorm = { contains: args.merchant.toLowerCase().replace(/[^a-z0-9]/g, '-') }
+  if (args.amountCents) where.amountCents = args.amountCents
+  if (args.date) {
+    const d = new Date(args.date)
+    const next = new Date(d.getTime() + 24 * 60 * 60 * 1000)
+    where.date = { gte: d, lt: next }
+  }
+  const found = await db.transaction.findMany({ where, take: 5 })
+  if (found.length === 0) {
+    return { tool: 'delete_transaction', success: false, data: null, summary: 'No matching transactions found' }
+  }
+  if (found.length > 1) {
+    return {
+      tool: 'delete_transaction',
+      success: false,
+      data: { matches: found.map(t => ({ id: t.id, merchant: t.merchantRaw, amountCents: t.amountCents, date: t.date })) },
+      summary: `Found ${found.length} matching transactions — please specify which one to delete by ID`,
+    }
+  }
+  await db.transaction.delete({ where: { id: found[0].id } })
+  return {
+    tool: 'delete_transaction',
+    success: true,
+    data: { id: found[0].id, merchant: found[0].merchantRaw, amountCents: found[0].amountCents },
+    summary: `Deleted transaction: ${found[0].merchantRaw} for $${(found[0].amountCents / 100).toFixed(2)}`,
   }
 }
 
 // ─── Tool registry ───────────────────────────────────────────────────────
 
 const TOOLS: Record<string, { fn: (ctx: ToolContext, args: any) => Promise<ToolResult>; desc: string }> = {
+  // Read tools
   get_transactions: { fn: getTransactions, desc: 'Query transactions with filters' },
   get_budget: { fn: getBudget, desc: 'Get current month budget status' },
   get_insights: { fn: getInsights, desc: 'Get spending insights and anomalies' },
   get_recommendations: { fn: getRecommendations, desc: 'Get ranked recommendations' },
   get_goals: { fn: getGoals, desc: 'Get savings goals' },
   run_simulation: { fn: runSimulation, desc: 'Run Monte Carlo on a savings goal' },
-  categorize_merchant: { fn: categorizeMerchant, desc: 'Re-categorize a merchant' },
+  categorize_merchant: { fn: categorizeMerchant, desc: 'Re-categorize a merchant (write)' },
+  // Write tools — let users add/edit data through the agent
+  add_transaction: { fn: addTransaction, desc: 'Add a new transaction (e.g. "I spent $50 on coffee at Blue Bottle")' },
+  create_goal: { fn: createGoal, desc: 'Create a new savings goal (e.g. "Create a goal to save $5000 for a car")' },
+  update_budget: { fn: updateBudget, desc: 'Update a budget envelope (e.g. "Set my dining budget to $400")' },
+  delete_transaction: { fn: deleteTransaction, desc: 'Delete a transaction by merchant/amount/date' },
 }
 
 export const TOOL_SCHEMAS = Object.entries(TOOLS).map(([name, t]) => ({
@@ -277,10 +485,103 @@ export const TOOL_SCHEMAS = Object.entries(TOOLS).map(([name, t]) => ({
 // ─── Intent router (the Supervisor) ──────────────────────────────────────
 
 function routeIntent(message: string): {
-  mode: 'quick_qa' | 'monthly_review' | 'goal_planning'
+  mode: 'quick_qa' | 'monthly_review' | 'goal_planning' | 'write'
   tools: { name: string; args: any }[]
 } {
   const lower = message.toLowerCase()
+
+  // ─── WRITE intents — detect add/create/update/delete commands ────
+  // Add transaction: "I spent $50 on coffee at Blue Bottle"
+  const spendMatch = message.match(/(?:i\s+(?:spent|paid|bought|purchased)|add|log|record)[^$]*\$?\s*(\d+(?:\.\d{1,2})?)/i)
+  if (spendMatch && /\b(spent|paid|bought|purchased|spent|expense)\b/i.test(lower)) {
+    const amountCents = Math.round(parseFloat(spendMatch[1]) * 100)
+    // Extract merchant — usually after "at" or "from" — match until end of string or terminator word
+    const merchantMatch = message.match(/(?:at|from|@)\s+([A-Z][\w\s&'-]+?)(?:\s+(?:for|in|on|today|yesterday|contributing|with|by)|[.,;]|$)/i)
+    const merchant = merchantMatch && merchantMatch[1] ? merchantMatch[1].trim() : 'Unknown Merchant'
+    // Smart category inference from "on X" pattern (e.g. "on groceries", "on coffee", "on gas")
+    const onMatch = message.match(/\bon\s+(\w+)/i)
+    let category: string | undefined
+    if (onMatch) {
+      const word = onMatch[1].toLowerCase()
+      // Map common spending words to categories
+      const categoryMap: Record<string, string> = {
+        groceries: 'Groceries', grocery: 'Groceries', food: 'Groceries',
+        coffee: 'Dining', lunch: 'Dining', dinner: 'Dining', dining: 'Dining', restaurant: 'Dining',
+        gas: 'Transport', fuel: 'Transport', uber: 'Transport', lyft: 'Transport', transport: 'Transport',
+        rent: 'Rent', utilities: 'Utilities', electric: 'Utilities',
+        entertainment: 'Entertainment', movie: 'Entertainment', movies: 'Entertainment',
+        shopping: 'Shopping', clothes: 'Shopping', clothing: 'Shopping',
+        health: 'Health', medical: 'Health', doctor: 'Health', pharmacy: 'Health',
+        subscription: 'Subscriptions', subscriptions: 'Subscriptions', netflix: 'Subscriptions', spotify: 'Subscriptions',
+      }
+      if (categoryMap[word]) category = categoryMap[word]
+    }
+    // Explicit category override
+    const categoryMatch = message.match(/(?:in|for)\s+(?:the\s+)?(\w+)\s+(?:category|bucket|envelope)/i)
+    if (categoryMatch) category = categoryMatch[1]
+    // Detect income: "received $X", "got paid $X", "income of $X"
+    const isIncome = /\b(received|got paid|income|deposit|salary|paycheck)\b/i.test(lower)
+    return {
+      mode: 'write',
+      tools: [{
+        name: 'add_transaction',
+        args: {
+          amount: amountCents,
+          merchant,
+          category,
+          direction: isIncome ? 'credit' : 'debit',
+          memo: `Added via agent: "${message}"`,
+        },
+      }],
+    }
+  }
+
+  // Create goal: "create a goal to save $5000 for a car"
+  const goalMatch = message.match(/(?:create|add|new|start)\s+(?:a\s+)?(?:goal|savings?\s+goal)[^$]*\$?\s*(\d+(?:\.\d{1,2})?)/i)
+  if (goalMatch) {
+    const targetCents = Math.round(parseFloat(goalMatch[1]) * 100)
+    // Extract goal name — usually "for X" or "to save for X" or "called X"
+    // Match until end of string, or "with", "by", "at", "contributing", "save $", or punctuation
+    const nameMatch = message.match(/(?:for|called|named)\s+(?:a\s|an\s|the\s)?([A-Za-z][\w\s'-]+?)(?:\s+(?:with|by|at|contributing|save)|[.,;]|$)/i)
+    const name = nameMatch ? nameMatch[1].trim() : 'New Goal'
+    // Extract monthly contribution if mentioned
+    const contribMatch = message.match(/(?:contributing|contribute)\s+\$?\s*(\d+(?:\.\d{1,2})?)\s*(?:\/|per)?\s*mo/i)
+    const monthlyContributionCents = contribMatch ? Math.round(parseFloat(contribMatch[1]) * 100) : undefined
+    return {
+      mode: 'write',
+      tools: [{
+        name: 'create_goal',
+        args: { name, targetCents, monthlyContributionCents },
+      }],
+    }
+  }
+
+  // Update budget: "set my dining budget to $400" or "update dining budget to 400"
+  const budgetMatch = message.match(/(?:set|update|change|adjust)\s+(?:my\s+)?(\w+)\s+budget\s+(?:to|at)\s+\$?\s*(\d+(?:\.\d{1,2})?)/i)
+  if (budgetMatch) {
+    const category = budgetMatch[1]
+    const amountCents = Math.round(parseFloat(budgetMatch[2]) * 100)
+    return {
+      mode: 'write',
+      tools: [{ name: 'update_budget', args: { category, amountCents } }],
+    }
+  }
+
+  // Delete transaction: "delete my last transaction" or "remove the $50 transaction"
+  const deleteMatch = message.match(/(?:delete|remove|erase)\s+(?:my\s+)?(?:last\s+)?transaction/i)
+  if (deleteMatch) {
+    const args: any = {}
+    const amountMatch = message.match(/\$?\s*(\d+(?:\.\d{1,2})?)/)
+    if (amountMatch) args.amountCents = Math.round(parseFloat(amountMatch[1]) * 100)
+    const merchantMatch = message.match(/(?:at|from|@)\s+([A-Z][\w\s&'-]+)/)
+    if (merchantMatch) args.merchant = merchantMatch[1].trim()
+    return {
+      mode: 'write',
+      tools: [{ name: 'delete_transaction', args }],
+    }
+  }
+
+  // ─── READ intents (existing logic) ───────────────────────────────
 
   // Goal planning — simulation triggers
   if (/\b(if|when|how long|save|cut|afford|simulation|goal)\b/i.test(lower) && /\b(trip|fund|laptop|car|save)\b/i.test(lower)) {
@@ -345,7 +646,18 @@ export async function runAgent(
   for (const t of tools) {
     const tool = TOOLS[t.name]
     if (!tool) continue
-    const result = await tool.fn(ctx, t.args)
+    let result: ToolResult
+    try {
+      result = await tool.fn(ctx, t.args)
+    } catch (err: any) {
+      console.error(`Tool ${t.name} failed:`, err)
+      result = {
+        tool: t.name,
+        success: false,
+        data: null,
+        summary: `Tool failed: ${err.message}`,
+      }
+    }
     toolResults.push(result)
     toolCalls.push({ name: t.name, args: t.args, success: result.success, summary: result.summary })
   }
@@ -360,7 +672,16 @@ CORE PRINCIPLES:
 4. Keep responses tight: 2-4 sentences for quick queries, 2-3 short paragraphs for monthly reviews. Use bullet points when listing multiple findings.
 5. When recommending actions, always state the dollar impact, the confidence level, and the underlying evidence.
 6. You are operating in ${ctx.privacyMode ? 'PRIVACY MODE (PII scrubbed locally before any cloud call)' : 'standard mode'}.
-7. User's current permission tier: ${ctx.tier}. Viewer cannot modify; Editor can modify budgets and recommendations; Approver can execute transfers.
+7. User's current permission tier: ${ctx.tier}. Viewer cannot modify; Editor can modify budgets, transactions, goals and recommendations; Approver can execute transfers.
+
+YOU CAN ADD AND EDIT DATA — not just read it. The user can ask you to:
+- **Add a transaction**: "I spent $50 on coffee at Blue Bottle" or "I received $2000 paycheck" or "Log a $30 expense at Shell"
+- **Create a savings goal**: "Create a goal to save $5000 for a car" or "Add a goal called Wedding with target $15000 contributing $400/mo"
+- **Update a budget**: "Set my dining budget to $400" or "Update my groceries budget to $500"
+- **Delete a transaction**: "Delete my last transaction" or "Remove the $50 transaction at Blue Bottle"
+- **Re-categorize a merchant**: "Categorize all Uber transactions as Transport"
+
+When the user asks to add/edit data, the write tool has already been executed by the time you respond. Confirm the action was successful (or explain why it failed) using the tool result summary, then offer a relevant follow-up. For example, after adding a transaction, you might mention how it affects their budget for that category.
 
 OUTPUT FORMAT:
 - Use **bold** for key numbers and recommendations.

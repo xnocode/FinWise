@@ -52,11 +52,16 @@ export async function POST(req: NextRequest) {
       ],
     })
 
+    // Detect if any write tool was called — flag for client refresh
+    const writeTools = ['add_transaction', 'create_goal', 'update_budget', 'delete_transaction', 'categorize_merchant']
+    const triggeredWrites = result.toolCalls.some((tc: any) => writeTools.includes(tc.name))
+
     return NextResponse.json({
       ok: true,
       response: result.response,
       mode: result.mode,
       toolCalls: result.toolCalls,
+      dataChanged: triggeredWrites,  // client uses this to refresh dashboards
     })
   } catch (err: any) {
     console.error('Chat error:', err)
