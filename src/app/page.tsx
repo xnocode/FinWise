@@ -19,7 +19,8 @@ import {
   LineChart as LineChartIcon, Sparkle, TrendingUp as TrendUp, Calculator,
   Calendar, CalendarClock, CreditCard, Download, AlertCircle, CheckCircle2,
   Info, Clock, DollarSign, Plus, Rocket, Dna, Sparkles as SparklesIcon,
-  Hourglass, GitBranch, Award,
+  Hourglass, GitBranch, Award, Settings, Moon, Sun, Globe,
+  Sliders, Trash2, Palette, User as UserIcon, Shield as ShieldIcon,
 } from 'lucide-react'
 import { fmt, fmtMonth } from '@/lib/format'
 import {
@@ -31,7 +32,7 @@ import {
 import { toast } from 'sonner'
 
 type Tier = 'Viewer' | 'Editor' | 'Approver'
-type View = 'overview' | 'transactions' | 'budgets' | 'goals' | 'insights' | 'analytics' | 'planning' | 'innovation'
+type View = 'overview' | 'transactions' | 'budgets' | 'goals' | 'insights' | 'analytics' | 'planning' | 'innovation' | 'settings'
 
 type ChatMessage = {
   role: 'user' | 'assistant'
@@ -170,6 +171,11 @@ export default function Home() {
   const [innovationData, setInnovationData] = useState<any>(null)
   const [innovationLoading, setInnovationLoading] = useState(false)
 
+  // Settings
+  const [settingsData, setSettingsData] = useState<any>(null)
+  const [settingsLoading, setSettingsLoading] = useState(false)
+  const [darkMode, setDarkMode] = useState(false)
+
   const loadDashboard = useCallback(async () => {
     const [txRes, budRes, goalRes, recRes, insRes] = await Promise.all([
       fetch('/api/transactions?range=6m'),
@@ -265,10 +271,62 @@ export default function Home() {
     }
   }, [])
 
+  const loadSettings = useCallback(async () => {
+    setSettingsLoading(true)
+    try {
+      const res = await fetch('/api/settings')
+      const d = await res.json()
+      if (d.ok) {
+        setSettingsData(d)
+        setDarkMode(d.settings?.theme === 'dark')
+        if (d.settings?.theme === 'dark') {
+          document.documentElement.classList.add('dark')
+        } else {
+          document.documentElement.classList.remove('dark')
+        }
+      }
+    } catch (err) {
+      console.error('Settings load failed:', err)
+    } finally {
+      setSettingsLoading(false)
+    }
+  }, [])
+
+  const updateSettings = useCallback(async (updates: any) => {
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      })
+      const d = await res.json()
+      if (d.ok) {
+        setSettingsData(prev => ({ ...prev, settings: d.settings }))
+        if (updates.theme !== undefined) {
+          setDarkMode(updates.theme === 'dark')
+          if (updates.theme === 'dark') {
+            document.documentElement.classList.add('dark')
+          } else {
+            document.documentElement.classList.remove('dark')
+          }
+        }
+        toast.success('Settings updated')
+        return true
+      } else {
+        toast.error(d.error || 'Failed to update settings')
+        return false
+      }
+    } catch (err: any) {
+      toast.error(err.message)
+      return false
+    }
+  }, [])
+
   useEffect(() => { if (seeded) loadDashboard() }, [seeded, loadDashboard])
   useEffect(() => { if (view === 'analytics' && !analytics) loadAnalytics() }, [view, analytics, loadAnalytics])
   useEffect(() => { if (view === 'planning' && !debtData) loadPlanning() }, [view, debtData, loadPlanning])
   useEffect(() => { if (view === 'innovation' && !innovationData) loadInnovation() }, [view, innovationData, loadInnovation])
+  useEffect(() => { if (view === 'settings' && !settingsData) loadSettings() }, [view, settingsData, loadSettings])
 
   const sendChat = async (text?: string) => {
     const msg = (text ?? input).trim()
@@ -384,6 +442,7 @@ export default function Home() {
     { id: 'insights', label: 'Insights', icon: Lightbulb, badge: anomalies.length > 0 ? String(anomalies.length) : undefined },
     { id: 'analytics', label: 'Analytics', icon: Brain, badge: 'AI' },
     { id: 'innovation', label: 'Innovation Lab', icon: Dna, badge: 'Beta' },
+    { id: 'settings', label: 'Settings', icon: Settings },
   ]
 
   return (
@@ -623,6 +682,19 @@ export default function Home() {
               data={innovationData}
               loading={innovationLoading}
               onRefresh={loadInnovation}
+            />
+          )}
+          {view === 'settings' && (
+            <SettingsView
+              data={settingsData}
+              loading={settingsLoading}
+              onRefresh={loadSettings}
+              onUpdate={updateSettings}
+              onSeed={handleSeed}
+              tier={tier}
+              setTier={setTier}
+              privacyMode={privacyMode}
+              setPrivacyMode={setPrivacyMode}
             />
           )}
         </main>
@@ -3626,6 +3698,528 @@ function InnovationView({ data, loading, onRefresh }: {
             <div className="text-[var(--fw-text-3)]">Analysis window</div>
             <div className="font-mono text-[var(--fw-text-2)] font-medium">6 months</div>
           </div>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+// ═══ View: Settings ═══════════════════════════════════════════════════
+function SettingsView({ data, loading, onRefresh, onUpdate, onSeed, tier, setTier, privacyMode, setPrivacyMode }: {
+  data: any
+  loading: boolean
+  onRefresh: () => void
+  onUpdate: (updates: any) => Promise<boolean>
+  onSeed: () => void
+  tier: Tier
+  setTier: (t: Tier) => void
+  privacyMode: boolean
+  setPrivacyMode: (v: boolean) => void
+}) {
+  const [localName, setLocalName] = useState<string | null>(null)
+  const [confirmReset, setConfirmReset] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  if (loading || !data) {
+    return (
+      <div className="p-10 flex items-center justify-center h-full">
+        <Loader2 className="h-8 w-8 animate-spin text-[var(--fw-accent)]" />
+      </div>
+    )
+  }
+
+  const s = data.settings || {}
+  // Use localName if user has typed, otherwise fall back to settings value
+  const displayName = localName !== null ? localName : (s.displayName || '')
+
+  const handleSaveName = async () => {
+    await onUpdate({ displayName: displayName, name: displayName })
+    setLocalName(null) // reset to use settings value after save
+  }
+
+  const handleReset = async () => {
+    setConfirmReset(false)
+    await onSeed()
+    onRefresh()
+  }
+
+  return (
+    <div className="p-6 sm:p-8 lg:p-10 space-y-6 max-w-[1000px]">
+      {/* Header */}
+      <div>
+        <div className="flex items-center gap-2 mb-1">
+          <Settings className="h-5 w-5 text-[var(--fw-accent)]" />
+          <h1 className="text-[28px] font-semibold tracking-tight">Settings</h1>
+        </div>
+        <p className="text-[13px] text-[var(--fw-text-3)] mt-1">
+          Manage your profile, appearance, notifications, agent behavior, and data
+        </p>
+      </div>
+
+      {/* ─── Profile Section ─────────────────────────────────── */}
+      <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl">
+        <div className="flex items-center gap-2 mb-4">
+          <UserIcon className="h-4 w-4 text-[var(--fw-accent)]" />
+          <h2 className="text-[14px] font-semibold">Profile</h2>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Display Name</label>
+            <div className="flex gap-2">
+              <Input
+                value={displayName}
+                onChange={(e) => setLocalName(e.target.value)}
+                placeholder="Your name"
+                className="h-9 text-[13px] border-[var(--fw-border)] bg-[var(--fw-surface-2)] rounded-lg"
+              />
+              <Button size="sm" className="h-9 px-3 bg-[var(--fw-text)] hover:bg-[var(--fw-text-2)] text-[var(--fw-surface)] rounded-lg" onClick={handleSaveName}>
+                Save
+              </Button>
+            </div>
+          </div>
+          <div>
+            <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Email</label>
+            <Input
+              value={data.user?.email || 'demo@example.com'}
+              disabled
+              className="h-9 text-[13px] border-[var(--fw-border)] bg-[var(--fw-surface-2)] rounded-lg opacity-60"
+            />
+          </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-[var(--fw-border)] flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold">Avatar Color</span>
+            <div className="flex gap-1.5">
+              {['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#8b5cf6', '#ef4444'].map(c => (
+                <button
+                  key={c}
+                  onClick={() => onUpdate({ avatarColor: c })}
+                  className={`h-7 w-7 rounded-full transition-all ${s.avatarColor === c ? 'ring-2 ring-offset-2 ring-[var(--fw-text)]' : 'hover:scale-110'}`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* ─── Appearance Section ──────────────────────────────── */}
+      <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl">
+        <div className="flex items-center gap-2 mb-4">
+          <Palette className="h-4 w-4 text-[var(--fw-accent)]" />
+          <h2 className="text-[14px] font-semibold">Appearance</h2>
+        </div>
+        <div className="space-y-4">
+          {/* Theme toggle */}
+          <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--fw-surface-2)] border border-[var(--fw-border)]">
+            <div className="flex items-center gap-2.5">
+              {s.theme === 'dark' ? <Moon className="h-4 w-4 text-[var(--fw-accent)]" /> : <Sun className="h-4 w-4 text-[var(--fw-warning)]" />}
+              <div>
+                <div className="text-[12px] font-medium">Theme</div>
+                <div className="text-[10px] text-[var(--fw-text-3)]">Switch between light and dark mode</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--fw-surface)] border border-[var(--fw-border)]">
+              <button
+                onClick={() => onUpdate({ theme: 'light' })}
+                className={`px-3 py-1 rounded-md text-[11px] font-medium transition-all ${s.theme !== 'dark' ? 'bg-[var(--fw-accent)] text-white' : 'text-[var(--fw-text-3)]'}`}
+              >
+                <Sun className="h-3 w-3 inline mr-1" /> Light
+              </button>
+              <button
+                onClick={() => onUpdate({ theme: 'dark' })}
+                className={`px-3 py-1 rounded-md text-[11px] font-medium transition-all ${s.theme === 'dark' ? 'bg-[var(--fw-accent)] text-white' : 'text-[var(--fw-text-3)]'}`}
+              >
+                <Moon className="h-3 w-3 inline mr-1" /> Dark
+              </button>
+            </div>
+          </div>
+
+          {/* Density */}
+          <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--fw-surface-2)] border border-[var(--fw-border)]">
+            <div className="flex items-center gap-2.5">
+              <Sliders className="h-4 w-4 text-[var(--fw-text-3)]" />
+              <div>
+                <div className="text-[12px] font-medium">Layout Density</div>
+                <div className="text-[10px] text-[var(--fw-text-3)]">Adjust spacing between elements</div>
+              </div>
+            </div>
+            <Select value={s.density || 'comfortable'} onValueChange={(v) => onUpdate({ density: v })}>
+              <SelectTrigger className="w-[130px] h-8 text-[11px] border-[var(--fw-border)] bg-[var(--fw-surface)] rounded-lg">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="compact">Compact</SelectItem>
+                <SelectItem value="comfortable">Comfortable</SelectItem>
+                <SelectItem value="spacious">Spacious</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </Card>
+
+      {/* ─── Localization Section ────────────────────────────── */}
+      <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl">
+        <div className="flex items-center gap-2 mb-4">
+          <Globe className="h-4 w-4 text-[var(--fw-accent)]" />
+          <h2 className="text-[14px] font-semibold">Localization</h2>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Currency</label>
+            <Select value={s.currency || 'USD'} onValueChange={(v) => onUpdate({ currency: v })}>
+              <SelectTrigger className="h-9 text-[12px] border-[var(--fw-border)] bg-[var(--fw-surface-2)] rounded-lg">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="USD">USD — US Dollar ($)</SelectItem>
+                <SelectItem value="EUR">EUR — Euro (€)</SelectItem>
+                <SelectItem value="GBP">GBP — British Pound (£)</SelectItem>
+                <SelectItem value="JPY">JPY — Japanese Yen (¥)</SelectItem>
+                <SelectItem value="CNY">CNY — Chinese Yuan (¥)</SelectItem>
+                <SelectItem value="INR">INR — Indian Rupee (₹)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Date Format</label>
+            <Select value={s.dateFormat || 'MMM d, yyyy'} onValueChange={(v) => onUpdate({ dateFormat: v })}>
+              <SelectTrigger className="h-9 text-[12px] border-[var(--fw-border)] bg-[var(--fw-surface-2)] rounded-lg">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="MMM d, yyyy">Jan 15, 2026</SelectItem>
+                <SelectItem value="DD/MM/YYYY">15/01/2026</SelectItem>
+                <SelectItem value="YYYY-MM-DD">2026-01-15</SelectItem>
+                <SelectItem value="d MMM yyyy">15 Jan 2026</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Number Format</label>
+            <Select value={s.numberFormat || 'en-US'} onValueChange={(v) => onUpdate({ numberFormat: v })}>
+              <SelectTrigger className="h-9 text-[12px] border-[var(--fw-border)] bg-[var(--fw-surface-2)] rounded-lg">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="en-US">1,234.56 (US)</SelectItem>
+                <SelectItem value="de-DE">1.234,56 (EU)</SelectItem>
+                <SelectItem value="ja-JP">1,234.56 (JP)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">First Day of Week</label>
+            <Select value={String(s.firstDayOfWeek ?? 0)} onValueChange={(v) => onUpdate({ firstDayOfWeek: parseInt(v) })}>
+              <SelectTrigger className="h-9 text-[12px] border-[var(--fw-border)] bg-[var(--fw-surface-2)] rounded-lg">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="0">Sunday</SelectItem>
+                <SelectItem value="1">Monday</SelectItem>
+                <SelectItem value="6">Saturday</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </Card>
+
+      {/* ─── Notifications Section ───────────────────────────── */}
+      <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl">
+        <div className="flex items-center gap-2 mb-4">
+          <Bell className="h-4 w-4 text-[var(--fw-accent)]" />
+          <h2 className="text-[14px] font-semibold">Notifications</h2>
+          <span className="ml-auto text-[10px] text-[var(--fw-text-3)]">Choose what you want to be notified about</span>
+        </div>
+        <div className="space-y-1">
+          {[
+            { key: 'notifInsights', label: 'Smart Insights', desc: 'AI-curated daily action items and opportunities' },
+            { key: 'notifBills', label: 'Bill Reminders', desc: 'Upcoming bills and coverage warnings' },
+            { key: 'notifAnomalies', label: 'Anomaly Alerts', desc: 'Unusual transactions flagged by Isolation Forest' },
+            { key: 'notifRecommendations', label: 'Recommendations', desc: 'New actionable recommendations with dollar impact' },
+            { key: 'notifBudgetAlerts', label: 'Budget Alerts', desc: 'Notifications when categories exceed budget thresholds' },
+            { key: 'notifWeeklyDigest', label: 'Weekly Digest', desc: 'Weekly summary email with spending trends and health score' },
+          ].map(item => (
+            <div key={item.key} className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-[var(--fw-surface-2)] transition-colors">
+              <div>
+                <div className="text-[12px] font-medium">{item.label}</div>
+                <div className="text-[10px] text-[var(--fw-text-3)]">{item.desc}</div>
+              </div>
+              <Switch
+                checked={s[item.key] ?? true}
+                onCheckedChange={(v) => onUpdate({ [item.key]: v })}
+                className="data-[state=checked]:bg-[var(--fw-accent)]"
+              />
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* ─── Agent Configuration ─────────────────────────────── */}
+      <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl">
+        <div className="flex items-center gap-2 mb-4">
+          <Bot className="h-4 w-4 text-[var(--fw-accent)]" />
+          <h2 className="text-[14px] font-semibold">Agent Configuration</h2>
+          <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded bg-[var(--fw-accent-soft)] text-[var(--fw-accent)] border border-[var(--fw-accent-border)] uppercase tracking-wider">AI</span>
+        </div>
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Response Style</label>
+              <Select value={s.agentResponseStyle || 'professional'} onValueChange={(v) => onUpdate({ agentResponseStyle: v })}>
+                <SelectTrigger className="h-9 text-[12px] border-[var(--fw-border)] bg-[var(--fw-surface-2)] rounded-lg">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="professional">Professional — analytical and concise</SelectItem>
+                  <SelectItem value="casual">Casual — friendly and conversational</SelectItem>
+                  <SelectItem value="detailed">Detailed — thorough with explanations</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Default Mode</label>
+              <Select value={s.agentDefaultMode || 'auto'} onValueChange={(v) => onUpdate({ agentDefaultMode: v })}>
+                <SelectTrigger className="h-9 text-[12px] border-[var(--fw-border)] bg-[var(--fw-surface-2)] rounded-lg">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">Auto — let the agent decide</SelectItem>
+                  <SelectItem value="quick_qa">Quick Q&A — fast single-shot answers</SelectItem>
+                  <SelectItem value="monthly_review">Monthly Review — always deep analysis</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between py-2.5 px-3 rounded-lg bg-[var(--fw-surface-2)] border border-[var(--fw-border)]">
+            <div>
+              <div className="text-[12px] font-medium">Auto-refresh dashboard after writes</div>
+              <div className="text-[10px] text-[var(--fw-text-3)]">Automatically reload data when the agent modifies transactions, budgets, or goals</div>
+            </div>
+            <Switch
+              checked={s.agentAutoRefresh ?? true}
+              onCheckedChange={(v) => onUpdate({ agentAutoRefresh: v })}
+              className="data-[state=checked]:bg-[var(--fw-accent)]"
+            />
+          </div>
+
+          <div className="flex items-center justify-between py-2.5 px-3 rounded-lg bg-[var(--fw-surface-2)] border border-[var(--fw-border)]">
+            <div>
+              <div className="text-[12px] font-medium">Confirm write operations</div>
+              <div className="text-[10px] text-[var(--fw-text-3)]">Ask for confirmation before the agent adds, edits, or deletes data</div>
+            </div>
+            <Switch
+              checked={s.agentConfirmWrites ?? false}
+              onCheckedChange={(v) => onUpdate({ agentConfirmWrites: v })}
+              className="data-[state=checked]:bg-[var(--fw-accent)]"
+            />
+          </div>
+        </div>
+      </Card>
+
+      {/* ─── Analytics Parameters ─────────────────────────────── */}
+      <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl">
+        <div className="flex items-center gap-2 mb-4">
+          <Calculator className="h-4 w-4 text-[var(--fw-accent)]" />
+          <h2 className="text-[14px] font-semibold">Analytics Parameters</h2>
+          <span className="ml-auto text-[10px] text-[var(--fw-text-3)]">Adjust assumptions used in projections</span>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <div className="flex justify-between mb-2">
+              <label className="text-[12px] font-medium text-[var(--fw-text-2)]">Expected annual investment return</label>
+              <span className="text-[13px] font-mono tnum font-semibold text-[var(--fw-accent)]">{((s.analyticsReturnRate ?? 0.07) * 100).toFixed(1)}%</span>
+            </div>
+            <Slider
+              value={[Math.round((s.analyticsReturnRate ?? 0.07) * 1000)]}
+              onValueChange={(v) => onUpdate({ analyticsReturnRate: v[0] / 1000 })}
+              min={0}
+              max={150}
+              step={5}
+              className="py-2"
+            />
+            <div className="flex justify-between text-[10px] text-[var(--fw-text-4)] mt-1">
+              <span>0%</span><span>7.5%</span><span>15%</span>
+            </div>
+          </div>
+          <div>
+            <div className="flex justify-between mb-2">
+              <label className="text-[12px] font-medium text-[var(--fw-text-2)]">Inflation rate</label>
+              <span className="text-[13px] font-mono tnum font-semibold text-[var(--fw-accent)]">{((s.analyticsInflation ?? 0.025) * 100).toFixed(1)}%</span>
+            </div>
+            <Slider
+              value={[Math.round((s.analyticsInflation ?? 0.025) * 1000)]}
+              onValueChange={(v) => onUpdate({ analyticsInflation: v[0] / 1000 })}
+              min={0}
+              max={100}
+              step={5}
+              className="py-2"
+            />
+            <div className="flex justify-between text-[10px] text-[var(--fw-text-4)] mt-1">
+              <span>0%</span><span>5%</span><span>10%</span>
+            </div>
+          </div>
+          <div>
+            <div className="flex justify-between mb-2">
+              <label className="text-[12px] font-medium text-[var(--fw-text-2)]">Monte Carlo volatility (annual)</label>
+              <span className="text-[13px] font-mono tnum font-semibold text-[var(--fw-accent)]">{((s.analyticsVolatility ?? 0.15) * 100).toFixed(1)}%</span>
+            </div>
+            <Slider
+              value={[Math.round((s.analyticsVolatility ?? 0.15) * 1000)]}
+              onValueChange={(v) => onUpdate({ analyticsVolatility: v[0] / 1000 })}
+              min={0}
+              max={400}
+              step={10}
+              className="py-2"
+            />
+            <div className="flex justify-between text-[10px] text-[var(--fw-text-4)] mt-1">
+              <span>0%</span><span>20%</span><span>40%</span>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* ─── Privacy & Security ──────────────────────────────── */}
+      <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl">
+        <div className="flex items-center gap-2 mb-4">
+          <ShieldIcon className="h-4 w-4 text-[var(--fw-accent)]" />
+          <h2 className="text-[14px] font-semibold">Privacy & Security</h2>
+        </div>
+        <div className="space-y-1">
+          <div className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-[var(--fw-surface-2)] transition-colors">
+            <div>
+              <div className="text-[12px] font-medium">Privacy mode (local PII scrubbing)</div>
+              <div className="text-[10px] text-[var(--fw-text-3)]">Flag PII for local scrubbing before any cloud LLM call</div>
+            </div>
+            <Switch
+              checked={privacyMode}
+              onCheckedChange={(v) => {
+                setPrivacyMode(v)
+                onUpdate({ privacyMode: v })
+              }}
+              className="data-[state=checked]:bg-[var(--fw-accent)]"
+            />
+          </div>
+          <div className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-[var(--fw-surface-2)] transition-colors">
+            <div>
+              <div className="text-[12px] font-medium">Share anonymized data for peer benchmarking</div>
+              <div className="text-[10px] text-[var(--fw-text-3)]">Your aggregated statistics contribute to anonymous peer comparisons (CCPA-compliant)</div>
+            </div>
+            <Switch
+              checked={s.shareAggregates ?? true}
+              onCheckedChange={(v) => onUpdate({ shareAggregates: v })}
+              className="data-[state=checked]:bg-[var(--fw-accent)]"
+            />
+          </div>
+          <div className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-[var(--fw-surface-2)] transition-colors">
+            <div>
+              <div className="text-[12px] font-medium">Default permission tier</div>
+              <div className="text-[10px] text-[var(--fw-text-3)]">Controls what actions you can perform (Viewer = read-only, Editor = modify, Approver = full access)</div>
+            </div>
+            <Select value={tier} onValueChange={(v) => {
+              setTier(v as Tier)
+              onUpdate({ tier: v })
+            }}>
+              <SelectTrigger className="w-[120px] h-8 text-[11px] border-[var(--fw-border)] bg-[var(--fw-surface)] rounded-lg">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Viewer">Viewer</SelectItem>
+                <SelectItem value="Editor">Editor</SelectItem>
+                <SelectItem value="Approver">Approver</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </Card>
+
+      {/* ─── Data Management ──────────────────────────────────── */}
+      <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl">
+        <div className="flex items-center gap-2 mb-4">
+          <Database className="h-4 w-4 text-[var(--fw-accent)]" />
+          <h2 className="text-[14px] font-semibold">Data Management</h2>
+        </div>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--fw-surface-2)] border border-[var(--fw-border)]">
+            <div>
+              <div className="text-[12px] font-medium">Export all transactions (CSV)</div>
+              <div className="text-[10px] text-[var(--fw-text-3)]">Download a CSV file with all your transaction data for external use</div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-[11px] rounded-lg border-[var(--fw-border)]"
+              onClick={() => {
+                const a = document.createElement('a')
+                a.href = '/api/export?format=csv&range=12m'
+                a.download = `finwise-export-${new Date().toISOString().split('T')[0]}.csv`
+                document.body.appendChild(a)
+                a.click()
+                document.body.removeChild(a)
+                toast.success('CSV export downloaded')
+              }}
+            >
+              <Download className="h-3.5 w-3.5 mr-1.5" /> Export
+            </Button>
+          </div>
+
+          <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--fw-warning-soft)] border border-[var(--fw-warning-border)]">
+            <div>
+              <div className="text-[12px] font-medium">Reset all data</div>
+              <div className="text-[10px] text-[var(--fw-text-3)]">Regenerate synthetic transactions, goals, and recommendations. This cannot be undone.</div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-[11px] rounded-lg border-[var(--fw-warning-border)] text-[var(--fw-warning)] hover:bg-[var(--fw-warning-soft)]"
+              onClick={() => setConfirmReset(true)}
+            >
+              <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Reset
+            </Button>
+          </div>
+
+          {confirmReset && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setConfirmReset(false)}>
+              <div className="bg-[var(--fw-surface)] rounded-xl p-5 w-96 border border-[var(--fw-border)] shadow-[var(--fw-shadow-lg)]" onClick={(e) => e.stopPropagation()}>
+                <div className="text-sm font-semibold mb-2">Reset all data?</div>
+                <div className="text-[11px] text-[var(--fw-text-3)] mb-4">This will delete all current transactions, budgets, goals, and recommendations, then generate fresh synthetic data. This action cannot be undone.</div>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="flex-1 rounded-lg" onClick={() => setConfirmReset(false)}>Cancel</Button>
+                  <Button size="sm" className="flex-1 bg-[var(--fw-warning)] hover:opacity-90 text-white rounded-lg" onClick={handleReset}>Yes, reset</Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* ─── About ────────────────────────────────────────────── */}
+      <Card className="p-5 bg-[var(--fw-surface-2)] border-[var(--fw-border)] rounded-xl">
+        <div className="flex items-center gap-2 mb-3">
+          <Info className="h-4 w-4 text-[var(--fw-text-3)]" />
+          <h2 className="text-[14px] font-semibold">About FinWise</h2>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[11px]">
+          <div>
+            <div className="text-[var(--fw-text-3)]">Version</div>
+            <div className="font-mono text-[var(--fw-text-2)] font-medium">v1.0.0</div>
+          </div>
+          <div>
+            <div className="text-[var(--fw-text-3)]">Track</div>
+            <div className="font-mono text-[var(--fw-text-2)] font-medium">PBCSF Topic A</div>
+          </div>
+          <div>
+            <div className="text-[var(--fw-text-3)]">Framework</div>
+            <div className="font-mono text-[var(--fw-text-2)] font-medium">Next.js 16</div>
+          </div>
+          <div>
+            <div className="text-[var(--fw-text-3)]">LLM</div>
+            <div className="font-mono text-[var(--fw-text-2)] font-medium">Z.ai Chat</div>
+          </div>
+        </div>
+        <div className="mt-3 pt-3 border-t border-[var(--fw-border)] text-[10px] text-[var(--fw-text-3)]">
+          FinWise is an agentic AI personal finance copilot with 11 tools, 14 API endpoints, 8 views, and 20+ features. Built for the PBCSF International Track competition.
         </div>
       </Card>
     </div>

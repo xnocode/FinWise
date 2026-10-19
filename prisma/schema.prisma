@@ -24,6 +24,46 @@ model User {
   goals           Goal[]
   conversations   Conversation[]
   recommendations Recommendation[]
+  settings        UserSettings?
+}
+
+model UserSettings {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  // Profile
+  displayName          String   @default("Demo User")
+  avatarColor          String   @default("#6366f1")
+  // Appearance
+  theme                String   @default("light") // light | dark
+  density              String   @default("comfortable") // compact | comfortable | spacious
+  // Localization
+  currency             String   @default("USD")
+  dateFormat           String   @default("MMM d, yyyy") // MMM d, yyyy | DD/MM/YYYY | YYYY-MM-DD
+  numberFormat         String   @default("en-US") // en-US | de-DE | ja-JP
+  firstDayOfWeek       Int      @default(0) // 0=Sunday, 1=Monday
+  // Notifications
+  notifInsights        Boolean  @default(true)
+  notifBills           Boolean  @default(true)
+  notifAnomalies       Boolean  @default(true)
+  notifRecommendations Boolean  @default(true)
+  notifBudgetAlerts    Boolean  @default(true)
+  notifWeeklyDigest    Boolean  @default(false)
+  // Agent
+  agentResponseStyle   String   @default("professional") // professional | casual | detailed
+  agentDefaultMode     String   @default("auto") // auto | quick_qa | monthly_review
+  agentAutoRefresh     Boolean  @default(true)
+  agentConfirmWrites   Boolean  @default(false)
+  // Analytics
+  analyticsReturnRate  Float    @default(0.07) // assumed annual investment return
+  analyticsInflation   Float    @default(0.025) // assumed inflation rate
+  analyticsVolatility  Float    @default(0.15) // Monte Carlo volatility
+  // Privacy
+  shareAggregates      Boolean  @default(true) // share anonymized data for peer benchmarking
+  // Timestamps
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Category {
