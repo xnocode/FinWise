@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   keywords: ["FinWise", "Personal Finance", "AI Agent", "Budgeting", "PBCSF", "WeBank"],
   authors: [{ name: "FinWise Team" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/logo.svg",
   },
   openGraph: {
     title: "FinWise — Intelligent Personal Finance",

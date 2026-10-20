@@ -1,7 +1,7 @@
 // Onboarding endpoint — track onboarding task completion
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getUserEmail } from '@/lib/auth'
+import { requireUser } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,8 +16,9 @@ const ONBOARDING_TASKS = [
 ]
 
 export async function GET(req: NextRequest) {
-  const userEmail = getUserEmail(req)
-  const user = await db.user.findUnique({ where: { email: userEmail }, include: { settings: true } })
+  const auth = await requireUser(req)
+  if (auth.error) return auth.error
+  const user = auth.user
   if (!user) return NextResponse.json({ ok: false, error: 'No user' }, { status: 404 })
 
   // Get completed tasks from settings (stored as JSON string in a field)
@@ -26,12 +27,31 @@ export async function GET(req: NextRequest) {
     settings = await db.userSettings.create({ data: { userId: user.id } })
   }
 
-  // Use the displayName field hack — we'll store onboarding progress in a separate approach
-  // For now, return the task list and let the client track completion in localStorage
+  let completed: string[] = []
+  try {
+    completed = settings.onboardingState ? JSON.parse(settings.onboardingState) : []
+  } catch {
+    completed = []
+  }
+
   return NextResponse.json({
     ok: true,
     tasks: ONBOARDING_TASKS,
+    completed,
   })
+}
+
+export async function PATCH(req: NextRequest) {
+  const auth = await requireUser(req)
+  if (auth.error) return auth.error
+  const body = await req.json().catch(() => ({}))
+  const completed = Array.isArray(body.completed) ? body.completed.filter((id: unknown) => typeof id === 'string') : []
+  await db.userSettings.upsert({
+    where: { userId: auth.user.id },
+    update: { onboardingState: JSON.stringify(completed) },
+    create: { userId: auth.user.id, onboardingState: JSON.stringify(completed) },
+  })
+  return NextResponse.json({ ok: true, completed })
 }
 
 export { ONBOARDING_TASKS }

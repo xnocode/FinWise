@@ -5,9 +5,9 @@
 // 3. 30-day Cash Flow Forecast (Holt-Winters exponential smoothing)
 // 4. Compound Growth Projections for each goal
 // 5. Savings trajectory analysis
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getUserEmail } from '@/lib/auth'
+import { requireUser } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -301,8 +301,9 @@ function calcHealthScore(input: {
 }
 
 export async function GET(req: NextRequest) {
-  const user = await db.user.findUnique({ where: { email: getUserEmail(req) } })
-  if (!user) return NextResponse.json({ ok: false, error: 'No user' }, { status: 404 })
+  const auth = await requireUser(req)
+  if (auth.error) return auth.error
+  const user = auth.user
 
   const now = new Date()
   const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1)
@@ -513,7 +514,10 @@ export async function GET(req: NextRequest) {
   // ─── Financial Stress Index (multi-factor risk) ───────────────────
   // Combines: budget overruns, anomaly rate, savings rate volatility, low emergency fund
   const budgetOverrunRate = budgets.length > 0
-    ? budgets.filter(b => b.percentUsed > 100).length / budgets.length
+    ? budgets.filter(b => {
+        const spent = thisMonthTx.filter(t => t.direction === 'debit' && t.categoryId === b.categoryId).reduce((s, t) => s + t.amountCents, 0)
+        return b.amountCents > 0 && (spent / b.amountCents) * 100 > 100
+      }).length / budgets.length
     : 0
   const savingsVolatility = (() => {
     const nets = savingsTrajectory.map(s => s.net)

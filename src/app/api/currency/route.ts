@@ -1,9 +1,9 @@
 // Currency endpoint — fetches live exchange rates and converts amounts
 // Uses open.er-api.com (free, no API key required)
 // Caches rates for 1 hour to avoid rate limiting
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getUserEmail } from '@/lib/auth'
+import { requireUser } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -297,10 +297,9 @@ async function fetchLiveRates(): Promise<Record<string, number>> {
 export async function GET(req: NextRequest) {
   try {
     // Get user's selected currency
-    const user = await db.user.findUnique({
-      where: { email: getUserEmail(req) },
-      include: { settings: true },
-    })
+    const auth = await requireUser(req)
+  if (auth.error) return auth.error
+  const user = auth.user
 
     let targetCurrency = 'USD'
     if (user?.settings?.currency) {

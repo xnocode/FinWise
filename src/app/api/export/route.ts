@@ -1,8 +1,8 @@
 // Export endpoint — generates CSV financial report
 // Solves: "I need to share my financial data with an accountant or for tax purposes"
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getUserEmail } from '@/lib/auth'
+import { requireUser } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,13 +15,14 @@ function csvEscape(value: string | number | null | undefined): string {
   return s
 }
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const format = url.searchParams.get('format') || 'csv'
   const range = url.searchParams.get('range') || '12m'
 
-  const user = await db.user.findUnique({ where: { email: getUserEmail(req) } })
-  if (!user) return NextResponse.json({ ok: false, error: 'No user' }, { status: 404 })
+  const auth = await requireUser(req)
+  if (auth.error) return auth.error
+  const user = auth.user
 
   const now = new Date()
   const months = range === '6m' ? 6 : range === '3m' ? 3 : range === '1m' ? 1 : 12

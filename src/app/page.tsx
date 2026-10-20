@@ -141,9 +141,10 @@ export default function Home() {
   const [view, setView] = useState<View>('overview')
   const [tier, setTier] = useState<Tier>('Editor')
   const [privacyMode, setPrivacyMode] = useState(false)
-  const [seeded, setSeeded] = useState(false)
-  const [seeding, setSeeding] = useState(false)
   const [chatOpen, setChatOpen] = useState(true)
+  const [pendingConfirm, setPendingConfirm] = useState<{ message: string; writes: { name: string; args: any }[] } | null>(null)
+  const [notifications, setNotifications] = useState<{ id: string; title: string; message: string; type: string; read: boolean; link?: string | null }[]>([])
+  const [notifOpen, setNotifOpen] = useState(false)
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -199,78 +200,78 @@ export default function Home() {
   }, [currencyConfig])
 
   // ─── Auth handlers ───────────────────────────────────────────────────
-  const handleAuth = async (action: 'login' | 'signup' | 'demo', email?: string, password?: string, name?: string) => {
+  const handleAuth = async (action: 'login' | 'signup', email?: string, password?: string, name?: string, currency?: string): Promise<{ ok: boolean; error?: string; field?: string }> => {
     setAuthLoading(true)
     try {
       const res = await fetch('/api/auth', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, email, password, name }),
+        body: JSON.stringify({ action, email, password, name, currency }),
       })
       const d = await res.json()
       if (d.ok) {
         setAuthUser(d.user)
-        localStorage.setItem('finwise_session', d.sessionToken)
-        localStorage.setItem('finwise_user', JSON.stringify(d.user))
-        // Set cookie FIRST so all subsequent API requests use the correct user
-        document.cookie = `finwise_email=${d.user.email}; path=/; max-age=${60*60*24*30}; SameSite=Lax`
-
-        if (action === 'demo') {
-          // Demo user: seed with sample data
-          setAppState('app')
-          handleSeed()  // This will setSeeded(true) and loadDashboard()
-          toast.success('Welcome to FinWise Demo!')
-        } else if (action === 'signup') {
-          // New user: NO data seeded — completely empty account
-          setSeeded(true)
-          loadDashboard()  // Load (empty) dashboard data for this user
-          setAppState('onboarding')
-          toast.success(`Account created! Welcome, ${d.user.name}`)
-        } else {
-          // Login: load existing user's data (no seeding)
-          setAppState('app')
-          setSeeded(true)
+        setTier((d.user.tier === 'Viewer' ? 'Viewer' : 'Editor') as Tier)
+        setPrivacyMode(Boolean(d.user.privacyMode))
+        if (action === 'signup') {
           loadDashboard()
-          toast.success(`Welcome back, ${d.user.name}!`)
+          setAppState('onboarding')
+          toast.success(`Account created. Welcome, ${d.user.name || d.user.email}`)
+        } else {
+          setAppState('app')
+          loadDashboard()
+          loadNotifications()
+          toast.success(`Welcome back, ${d.user.name || d.user.email}`)
         }
-      } else {
-        toast.error(d.error || 'Authentication failed')
+        return { ok: true }
       }
+      return { ok: false, error: d.error || 'Authentication failed', field: d.field }
     } catch (err: any) {
-      toast.error(err.message)
+      return { ok: false, error: 'Could not reach the server. Please check your connection and try again.' }
     } finally {
       setAuthLoading(false)
     }
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'logout' }),
+      })
+    } catch {}
     setAuthUser(null)
     setAppState('landing')
-    localStorage.removeItem('finwise_session')
-    localStorage.removeItem('finwise_user')
-    localStorage.removeItem('finwise_onboarding')
-    // Clear the email cookie
-    document.cookie = 'finwise_email=; path=/; max-age=0'
     setCompletedTasks(new Set())
+    setTxns([])
+    setBudgets([])
+    setGoals([])
+    setRecs([])
     toast.success('Signed out')
   }
 
-  // Check for existing session on mount
   useEffect(() => {
-    const session = localStorage.getItem('finwise_session')
-    const userStr = localStorage.getItem('finwise_user')
-    if (session && userStr) {
+    let cancelled = false
+    ;(async () => {
       try {
-        const user = JSON.parse(userStr)
-        setAuthUser(user)
-        // Restore cookie for API requests
-        document.cookie = `finwise_email=${user.email}; path=/; max-age=${60*60*24*30}; SameSite=Lax`
+        const res = await fetch('/api/auth', { credentials: 'include' })
+        const d = await res.json()
+        if (cancelled || !d.ok || !d.user) return
+        setAuthUser(d.user)
+        setTier((d.user.tier === 'Viewer' ? 'Viewer' : 'Editor') as Tier)
+        setPrivacyMode(Boolean(d.user.privacyMode))
         setAppState('app')
-        // For returning users: load their data (NOT seed — only load what they have)
-        setSeeded(true)
         loadDashboard()
+        loadNotifications()
+        if (d.settings?.onboardingState) {
+          try { setCompletedTasks(new Set(JSON.parse(d.settings.onboardingState))) } catch {}
+        }
       } catch {}
-    }
+    })()
+    return () => { cancelled = true }
   }, [])
 
   // ─── Onboarding task tracking ────────────────────────────────────────
@@ -288,20 +289,15 @@ export default function Home() {
     setCompletedTasks(prev => {
       const next = new Set(prev)
       next.add(taskId)
-      localStorage.setItem('finwise_onboarding', JSON.stringify(Array.from(next)))
+      fetch('/api/onboarding', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ completed: Array.from(next) }),
+      }).catch(() => {})
       return next
     })
   }
-
-  // Load onboarding progress from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem('finwise_onboarding')
-    if (saved) {
-      try {
-        setCompletedTasks(new Set(JSON.parse(saved)))
-      } catch {}
-    }
-  }, [])
 
   // Track view visits for onboarding
   useEffect(() => {
@@ -309,7 +305,7 @@ export default function Home() {
     const taskMap: Record<View, string> = {
       overview: 'explore_overview',
       budgets: 'view_budgets',
-      goals: 'run_simulation',
+      goals: '',
       analytics: 'explore_analytics',
       innovation: 'visit_innovation',
       transactions: '',
@@ -345,11 +341,11 @@ export default function Home() {
 
   const loadDashboard = useCallback(async () => {
     const [txRes, budRes, goalRes, recRes, insRes] = await Promise.all([
-      fetch('/api/transactions?range=6m'),
-      fetch('/api/budget'),
-      fetch('/api/goals'),
-      fetch('/api/recommendations'),
-      fetch('/api/insights'),
+      fetch('/api/transactions?range=6m', { credentials: 'include' }),
+      fetch('/api/budget', { credentials: 'include' }),
+      fetch('/api/goals', { credentials: 'include' }),
+      fetch('/api/recommendations', { credentials: 'include' }),
+      fetch('/api/insights', { credentials: 'include' }),
     ])
     if (txRes.ok) {
       const d = await txRes.json()
@@ -371,43 +367,30 @@ export default function Home() {
     }
   }, [])
 
-  const handleSeed = async () => {
-    setSeeding(true)
+  const loadNotifications = useCallback(async () => {
     try {
-      const headers: Record<string, string> = {}
-      if (authUser?.email) {
-        headers['X-User-Email'] = authUser.email
-      }
-      const res = await fetch('/api/seed', { method: 'POST', headers })
+      const res = await fetch('/api/notifications', { credentials: 'include' })
       const d = await res.json()
-      if (d.ok) {
-        toast.success('Dataset regenerated', {
-          description: `${d.transactionCount} transactions · ${d.goalCount} goals · ${d.recommendationCount} recommendations`,
-        })
-        setSeeded(true)
-        await loadDashboard()
-      } else {
-        toast.error(d.error || 'Seed failed')
-      }
-    } catch (err: any) {
-      toast.error(err.message)
-    } finally {
-      setSeeding(false)
-    }
+      if (d.ok) setNotifications(d.notifications || [])
+    } catch {}
+  }, [])
+
+  const persistPrivacy = async (next: boolean) => {
+    setPrivacyMode(next)
+    try {
+      await fetch('/api/settings', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ privacyMode: next }),
+      })
+    } catch {}
   }
 
-  useEffect(() => {
-    // Only auto-seed for demo users or returning users — NOT for brand new signups
-    // The auth handler controls seeding explicitly
-    if (appState === 'app' && !authUser) {
-      // No auth user — don't seed
-      return
-    }
-  }, [])
   const loadAnalytics = useCallback(async () => {
     setAnalyticsLoading(true)
     try {
-      const res = await fetch('/api/analytics')
+      const res = await fetch('/api/analytics', { credentials: 'include' })
       const d = await res.json()
       if (d.ok) setAnalytics(d)
     } catch (err) {
@@ -421,9 +404,9 @@ export default function Home() {
     setPlanningLoading(true)
     try {
       const [debtRes, billsRes, insRes] = await Promise.all([
-        fetch('/api/debt'),
-        fetch('/api/bills'),
-        fetch('/api/smart-insights'),
+        fetch('/api/debt', { credentials: 'include' }),
+        fetch('/api/bills', { credentials: 'include' }),
+        fetch('/api/smart-insights', { credentials: 'include' }),
       ])
       const [debt, bills, ins] = await Promise.all([debtRes.json(), billsRes.json(), insRes.json()])
       if (debt.ok) setDebtData(debt)
@@ -439,7 +422,7 @@ export default function Home() {
   const loadInnovation = useCallback(async () => {
     setInnovationLoading(true)
     try {
-      const res = await fetch('/api/innovation')
+      const res = await fetch('/api/innovation', { credentials: 'include' })
       const d = await res.json()
       if (d.ok) setInnovationData(d)
     } catch (err) {
@@ -452,7 +435,7 @@ export default function Home() {
   const loadSettings = useCallback(async () => {
     setSettingsLoading(true)
     try {
-      const res = await fetch('/api/settings')
+      const res = await fetch('/api/settings', { credentials: 'include' })
       const d = await res.json()
       if (d.ok) {
         setSettingsData(d)
@@ -472,7 +455,7 @@ export default function Home() {
 
   const loadCurrency = useCallback(async () => {
     try {
-      const res = await fetch('/api/currency')
+      const res = await fetch('/api/currency', { credentials: 'include' })
       const d = await res.json()
       if (d.ok) {
         setCurrencyInfo(d)
@@ -491,6 +474,7 @@ export default function Home() {
     try {
       const res = await fetch('/api/settings', {
         method: 'PATCH',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates),
       })
@@ -521,40 +505,46 @@ export default function Home() {
     }
   }, [loadCurrency])
 
-  useEffect(() => { if (seeded) loadDashboard() }, [seeded, loadDashboard])
+  useEffect(() => { if (appState === 'app') loadDashboard() }, [appState, loadDashboard])
   useEffect(() => { if (view === 'analytics' && !analytics) loadAnalytics() }, [view, analytics, loadAnalytics])
   useEffect(() => { if (view === 'planning' && !debtData) loadPlanning() }, [view, debtData, loadPlanning])
   useEffect(() => { if (view === 'innovation' && !innovationData) loadInnovation() }, [view, innovationData, loadInnovation])
   useEffect(() => { if (view === 'settings' && !settingsData) loadSettings() }, [view, settingsData, loadSettings])
-  useEffect(() => { if (seeded) loadCurrency() }, [seeded, loadCurrency])
+  useEffect(() => { if (appState === 'app') loadCurrency() }, [appState, loadCurrency])
   // Sync global currency state — so every fmt() call across all components uses live conversion
   useEffect(() => { setGlobalCurrency(currencyConfig) }, [currencyConfig])
 
-  const sendChat = async (text?: string) => {
+  const sendChat = async (text?: string, confirmed = false) => {
     const msg = (text ?? input).trim()
     if (!msg || chatLoading) return
     setInput('')
-    const newMsgs: ChatMessage[] = [...messages, { role: 'user', content: msg }]
-    setMessages(newMsgs)
+    const newMsgs: ChatMessage[] = confirmed ? messages : [...messages, { role: 'user', content: msg }]
+    if (!confirmed) setMessages(newMsgs)
     setChatLoading(true)
+    setPendingConfirm(null)
     setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight }, 50)
 
     try {
-      const chatHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (authUser?.email) chatHeaders['X-User-Email'] = authUser.email
       const res = await fetch('/api/chat', {
         method: 'POST',
-        headers: chatHeaders,
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: msg,
           history: messages.map(m => ({ role: m.role, content: m.content })),
-          privacyMode, tier,
+          confirmed,
         }),
       })
       const d = await res.json()
-      if (d.ok) {
+      if (d.ok && d.needsConfirmation) {
+        setPendingConfirm({ message: msg, writes: d.pendingWrites || [] })
+        setMessages([...newMsgs, {
+          role: 'assistant',
+          content: 'This will change your records. Confirm below to apply it.',
+          mode: 'write',
+        }])
+      } else if (d.ok) {
         setMessages([...newMsgs, { role: 'assistant', content: d.response, mode: d.mode, toolCalls: d.toolCalls }])
-        // If the agent modified data, refresh dashboard + show toast
         if (d.dataChanged) {
           toast.success('Data updated via agent', {
             description: 'Refreshing your dashboard...',
@@ -592,7 +582,7 @@ export default function Home() {
     const fd = new FormData()
     fd.append('file', file)
     try {
-      const res = await fetch('/api/transactions', { method: 'POST', body: fd })
+      const res = await fetch('/api/transactions', { method: 'POST', credentials: 'include', body: fd })
       const d = await res.json()
       if (d.ok) {
         toast.success(`Imported ${d.imported} transactions`, { description: file.name })
@@ -602,28 +592,13 @@ export default function Home() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  const receiptInputRef = useRef<HTMLInputElement>(null)
-  const handleReceipt = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const fd = new FormData()
-    fd.append('file', file)
-    try {
-      const res = await fetch('/api/upload', { method: 'POST', body: fd })
-      const d = await res.json()
-      if (d.ok) {
-        toast.success('Receipt parsed', { description: `${d.merchant} · ${fmt(d.totalCents)} · ${d.itemCount} items` })
-        await loadDashboard()
-      } else { toast.error(d.error || 'Receipt parse failed') }
-    } catch (err: any) { toast.error(err.message) }
-    if (receiptInputRef.current) receiptInputRef.current.value = ''
-  }
 
   const updateRec = async (id: string, status: 'accepted' | 'dismissed') => {
     setRecs(prev => prev.map(r => r.id === id ? { ...r, status } : r))
     try {
       await fetch('/api/recommendations', {
         method: 'PATCH',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, status }),
       })
@@ -642,21 +617,21 @@ export default function Home() {
     { id: 'transactions', label: 'Transactions', icon: ListFilter },
     { id: 'budgets', label: 'Budgets', icon: Wallet, badge: overBudgetCount > 0 ? String(overBudgetCount) : undefined },
     { id: 'goals', label: 'Goals', icon: PiggyBank },
-    { id: 'planning', label: 'Planning', icon: Rocket, badge: 'New' },
+    { id: 'planning', label: 'Planning', icon: Rocket },
     { id: 'insights', label: 'Insights', icon: Lightbulb, badge: anomalies.length > 0 ? String(anomalies.length) : undefined },
-    { id: 'analytics', label: 'Analytics', icon: Brain, badge: 'AI' },
-    { id: 'innovation', label: 'Innovation Lab', icon: Dna, badge: 'Beta' },
+    { id: 'analytics', label: 'Analytics', icon: Brain },
+    { id: 'innovation', label: 'Innovation Lab', icon: Dna },
     { id: 'settings', label: 'Settings', icon: Settings },
   ]
 
   // ─── LANDING PAGE ──────────────────────────────────────────────────────
   if (appState === 'landing') {
-    return <LandingPage onGetStarted={() => setAppState('auth')} onDemo={() => handleAuth('demo')} />
+    return <LandingPage onGetStarted={() => { setAuthMode('signup'); setAppState('auth') }} onSignIn={() => { setAuthMode('login'); setAppState('auth') }} />
   }
 
   // ─── AUTH PAGE ─────────────────────────────────────────────────────────
   if (appState === 'auth') {
-    return <AuthPage mode={authMode} setMode={setAuthMode} onAuth={handleAuth} loading={authLoading} onBack={() => setAppState('landing')} onDemo={() => handleAuth('demo')} />
+    return <AuthPage mode={authMode} setMode={setAuthMode} onAuth={handleAuth} loading={authLoading} onBack={() => setAppState('landing')} />
   }
 
   // ─── ONBOARDING PAGE ──────────────────────────────────────────────────
@@ -698,9 +673,9 @@ export default function Home() {
                 </span>
               </div>
             </div>
-            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--fw-positive-soft)] border border-[var(--fw-positive-border)] ml-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--fw-positive)] fw-pulse" />
-              <span className="text-[11px] text-[var(--fw-positive)] font-semibold">Live</span>
+            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--fw-surface-2)] border border-[var(--fw-border)] ml-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--fw-positive)]" />
+              <span className="text-[11px] text-[var(--fw-text-2)] font-semibold">Signed in</span>
             </div>
             {/* Currency indicator */}
             {currencyConfig && currencyConfig.currency !== 'USD' && (
@@ -716,21 +691,83 @@ export default function Home() {
           {/* Right controls */}
           <div className="flex items-center gap-2">
             {/* Notifications */}
-            <button className="hidden sm:flex relative h-8 w-8 items-center justify-center rounded-lg border border-[var(--fw-border)] bg-[var(--fw-surface)] hover:bg-[var(--fw-surface-2)] hover:border-[var(--fw-border-strong)] transition-all fw-focus">
-              <Bell className="h-3.5 w-3.5 text-[var(--fw-text-2)]" />
-              {pendingRecCount > 0 && (
-                <span className="absolute -top-1 -right-1 h-4 min-w-4 px-1 rounded-full bg-[var(--fw-accent)] text-[9px] font-bold text-white flex items-center justify-center">
-                  {pendingRecCount}
-                </span>
+            <div className="relative hidden sm:block">
+              <button
+                onClick={() => setNotifOpen((v) => !v)}
+                className="relative h-8 w-8 flex items-center justify-center rounded-lg border border-[var(--fw-border)] bg-[var(--fw-surface)] hover:bg-[var(--fw-surface-2)] hover:border-[var(--fw-border-strong)] transition-all fw-focus"
+                aria-label="Notifications"
+              >
+                <Bell className="h-3.5 w-3.5 text-[var(--fw-text-2)]" />
+                {notifications.filter((n) => !n.read).length + pendingRecCount > 0 && (
+                  <span className="absolute -top-1 -right-1 h-4 min-w-4 px-1 rounded-full bg-[var(--fw-accent)] text-[9px] font-bold text-white flex items-center justify-center">
+                    {notifications.filter((n) => !n.read).length || pendingRecCount}
+                  </span>
+                )}
+              </button>
+              {notifOpen && (
+                <div className="absolute right-0 top-10 z-50 w-80 rounded-xl border border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-lg)] p-2">
+                  <div className="flex items-center justify-between px-2 py-1.5">
+                    <span className="text-[11px] font-semibold">Notifications</span>
+                    <button
+                      className="text-[10px] text-[var(--fw-accent)]"
+                      onClick={async () => {
+                        await fetch('/api/notifications', {
+                          method: 'PATCH',
+                          credentials: 'include',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ readAll: true }),
+                        })
+                        loadNotifications()
+                      }}
+                    >
+                      Mark all read
+                    </button>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto fw-scroll">
+                    {notifications.length === 0 && pendingRecCount === 0 && (
+                      <div className="px-2 py-6 text-[11px] text-[var(--fw-text-3)] text-center">No notifications yet.</div>
+                    )}
+                    {pendingRecCount > 0 && (
+                      <button
+                        className="w-full text-left px-2 py-2 rounded-lg hover:bg-[var(--fw-surface-2)]"
+                        onClick={() => { setView('insights'); setNotifOpen(false) }}
+                      >
+                        <div className="text-[12px] font-medium">{pendingRecCount} pending recommendation{pendingRecCount === 1 ? '' : 's'}</div>
+                        <div className="text-[10px] text-[var(--fw-text-3)]">Open Insights to accept or dismiss</div>
+                      </button>
+                    )}
+                    {notifications.map((n) => (
+                      <button
+                        key={n.id}
+                        className={`w-full text-left px-2 py-2 rounded-lg hover:bg-[var(--fw-surface-2)] ${n.read ? 'opacity-70' : ''}`}
+                        onClick={async () => {
+                          await fetch('/api/notifications', {
+                            method: 'PATCH',
+                            credentials: 'include',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: n.id }),
+                          })
+                          if (n.link) setView(n.link as View)
+                          setNotifOpen(false)
+                          loadNotifications()
+                        }}
+                      >
+                        <div className="text-[12px] font-medium">{n.title}</div>
+                        <div className="text-[10px] text-[var(--fw-text-3)]">{n.message}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
-            </button>
+            </div>
 
             {/* Privacy toggle */}
             <div
               role="button"
               tabIndex={0}
-              onClick={() => setPrivacyMode(!privacyMode)}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPrivacyMode(!privacyMode) } }}
+              onClick={() => persistPrivacy(!privacyMode)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); persistPrivacy(!privacyMode) } }}
+              title="On-device answers skip the cloud LLM and use tool results only"
               className={`flex items-center gap-2 px-3 h-8 rounded-lg border transition-all fw-focus cursor-pointer ${
                 privacyMode
                   ? 'bg-[var(--fw-accent-soft)] border-[var(--fw-accent-border)]'
@@ -743,23 +780,24 @@ export default function Home() {
                 <Zap className="h-3.5 w-3.5 text-[var(--fw-text-3)]" />
               )}
               <span className={`text-[11px] font-medium hidden sm:inline ${privacyMode ? 'text-[var(--fw-accent)]' : 'text-[var(--fw-text-2)]'}`}>
-                {privacyMode ? 'Local' : 'Cloud'}
+                {privacyMode ? 'On-device' : 'Cloud LLM'}
               </span>
-              <Switch checked={privacyMode} onCheckedChange={setPrivacyMode} className="scale-75 data-[state=checked]:bg-[var(--fw-accent)] pointer-events-none" />
+              <Switch checked={privacyMode} onCheckedChange={persistPrivacy} className="scale-75 data-[state=checked]:bg-[var(--fw-accent)] pointer-events-none" />
             </div>
 
             {/* Permission tier */}
-            <Select value={tier} onValueChange={(v) => setTier(v as Tier)}>
+            <Select value={tier === 'Approver' ? 'Editor' : tier} onValueChange={(v) => {
+              const next = v as Tier
+              setTier(next)
+              updateSettings({ tier: next })
+            }}>
               <SelectTrigger className="w-[180px] h-8 text-[11px] font-medium border-[var(--fw-border)] bg-[var(--fw-surface)] hover:border-[var(--fw-border-strong)] rounded-lg">
                 <div className="flex items-center gap-1.5 w-full">
                   {tier === 'Viewer' && <Shield className="h-3.5 w-3.5 text-[var(--fw-text-3)] flex-shrink-0" />}
-                  {tier === 'Editor' && <ShieldCheck className="h-3.5 w-3.5 text-[var(--fw-accent)] flex-shrink-0" />}
-                  {tier === 'Approver' && <ShieldAlert className="h-3.5 w-3.5 text-[var(--fw-warning)] flex-shrink-0" />}
-                  <span className="font-medium">{tier}</span>
+                  {tier !== 'Viewer' && <ShieldCheck className="h-3.5 w-3.5 text-[var(--fw-accent)] flex-shrink-0" />}
+                  <span className="font-medium">{tier === 'Viewer' ? 'Viewer' : 'Editor'}</span>
                   <span className="text-[10px] text-[var(--fw-text-3)] truncate">
-                    {tier === 'Viewer' && '· Read-only'}
-                    {tier === 'Editor' && '· Modify budgets'}
-                    {tier === 'Approver' && '· Execute transfers'}
+                    {tier === 'Viewer' ? '· Read-only' : '· Can edit'}
                   </span>
                 </div>
               </SelectTrigger>
@@ -778,33 +816,12 @@ export default function Home() {
                     <ShieldCheck className="h-3.5 w-3.5 text-[var(--fw-accent)]" />
                     <div className="flex flex-col">
                       <span className="text-xs font-medium">Editor</span>
-                      <span className="text-[10px] text-[var(--fw-text-3)]">Modify budgets</span>
-                    </div>
-                  </div>
-                </SelectItem>
-                <SelectItem value="Approver">
-                  <div className="flex items-center gap-2">
-                    <ShieldAlert className="h-3.5 w-3.5 text-[var(--fw-warning)]" />
-                    <div className="flex flex-col">
-                      <span className="text-xs font-medium">Approver</span>
-                      <span className="text-[10px] text-[var(--fw-text-3)]">Execute transfers</span>
+                      <span className="text-[10px] text-[var(--fw-text-3)]">Add and edit records</span>
                     </div>
                   </div>
                 </SelectItem>
               </SelectContent>
             </Select>
-
-            {/* Reset */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSeed}
-              disabled={seeding}
-              className="h-8 text-[11px] font-medium border-[var(--fw-border)] hover:border-[var(--fw-border-strong)] rounded-lg"
-            >
-              {seeding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              <span className="hidden sm:inline ml-1.5">Reset</span>
-            </Button>
 
             {/* Onboarding progress (shows if incomplete) */}
             {!onboardingComplete && (
@@ -943,9 +960,9 @@ export default function Home() {
             <div className="space-y-1 text-[10px]">
               <SystemRow icon={Database} label="DB" value="SQLite · Prisma" />
               <SystemRow icon={Cpu} label="Workers" value="4 active" />
-              <SystemRow icon={Zap} label="LLM" value="Z.ai Chat" />
-              <SystemRow icon={Lock} label="PII" value={privacyMode ? 'Scrubbed' : 'Standard'} highlight={privacyMode} />
-              <SystemRow icon={Activity} label="Latency" value="~1.5s" />
+              <SystemRow icon={Zap} label="LLM" value={privacyMode ? 'On-device' : 'Cloud rewrite'} />
+              <SystemRow icon={Lock} label="Mode" value={privacyMode ? 'No cloud LLM' : 'Cloud optional'} highlight={privacyMode} />
+              <SystemRow icon={Activity} label="Auth" value="Signed in" />
             </div>
           </div>
         </aside>
@@ -960,12 +977,12 @@ export default function Home() {
               budgets={budgets} overBudgetCount={overBudgetCount}
               goals={goals} recs={recs} totalPendingRecs={totalPendingRecs}
               tier={tier} onUpdateRec={updateRec} onRefresh={loadDashboard}
-              fileInputRef={fileInputRef} receiptInputRef={receiptInputRef}
+              fileInputRef={fileInputRef}
             />
           )}
           {view === 'transactions' && <TransactionsView txns={txns} byCategory={byCategory} />}
           {view === 'budgets' && <BudgetsView budgets={budgets} tier={tier} onUpdate={loadDashboard} />}
-          {view === 'goals' && <GoalsView goals={goals} />}
+          {view === 'goals' && <GoalsView goals={goals} onSimulationComplete={() => completeTask('run_simulation')} />}
           {view === 'insights' && (
             <InsightsView
               anomalies={anomalies} momDeltas={momDeltas}
@@ -1003,7 +1020,6 @@ export default function Home() {
               loading={settingsLoading}
               onRefresh={loadSettings}
               onUpdate={updateSettings}
-              onSeed={handleSeed}
               tier={tier}
               setTier={setTier}
               privacyMode={privacyMode}
@@ -1021,6 +1037,9 @@ export default function Home() {
               chatLoading={chatLoading} sendChat={sendChat}
               scrollRef={scrollRef} quickPrompts={quickPrompts}
               privacyMode={privacyMode} onClose={() => setChatOpen(false)}
+              pendingConfirm={pendingConfirm}
+              onConfirm={() => pendingConfirm && sendChat(pendingConfirm.message, true)}
+              onCancel={() => setPendingConfirm(null)}
             />
           </aside>
         )}
@@ -1045,13 +1064,15 @@ export default function Home() {
               chatLoading={chatLoading} sendChat={sendChat}
               scrollRef={scrollRef} quickPrompts={quickPrompts}
               privacyMode={privacyMode} onClose={() => setChatOpen(false)}
+              pendingConfirm={pendingConfirm}
+              onConfirm={() => pendingConfirm && sendChat(pendingConfirm.message, true)}
+              onCancel={() => setPendingConfirm(null)}
             />
           </div>
         </div>
       )}
 
       <input ref={fileInputRef} type="file" accept=".csv" onChange={handleCsvUpload} className="hidden" />
-      <input ref={receiptInputRef} type="file" accept="image/*" onChange={handleReceipt} className="hidden" />
 
       {/* ─── Footer ─────────────────────────────────────────────────────── */}
       <footer className="flex-shrink-0 border-t border-[var(--fw-border)] bg-[var(--fw-surface)]">
@@ -1066,7 +1087,7 @@ export default function Home() {
             <span>·</span>
             <span className="flex items-center gap-1"><FileText className="h-3 w-3" /> 4-layer architecture</span>
             <span>·</span>
-            <span className="flex items-center gap-1"><Shield className="h-3 w-3" /> GDPR · CCPA · PIPL</span>
+            <span className="flex items-center gap-1"><Shield className="h-3 w-3" /> Session auth · local SQLite</span>
           </div>
         </div>
       </footer>
@@ -1091,12 +1112,11 @@ function OverviewView(props: {
   tier: Tier
   onUpdateRec: (id: string, status: 'accepted' | 'dismissed') => void
   onRefresh: () => void
-  fileInputRef: React.RefObject<HTMLInputElement>
-  receiptInputRef: React.RefObject<HTMLInputElement>
+  fileInputRef: React.RefObject<HTMLInputElement | null>
 }) {
   const { txns, byCategory, byMonth, totalSpend, totalIncome, netSavings, savingsRate,
           budgets, overBudgetCount, goals, recs, totalPendingRecs, tier, onUpdateRec,
-          fileInputRef, receiptInputRef } = props
+          fileInputRef } = props
 
   return (
     <div className="p-6 sm:p-8 lg:p-10 space-y-8 max-w-[1200px]">
@@ -1109,9 +1129,6 @@ function OverviewView(props: {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg border-[var(--fw-border)] hover:border-[var(--fw-border-strong)]" onClick={() => receiptInputRef.current?.click()}>
-            <Receipt className="h-3.5 w-3.5 mr-1.5" /> Receipt OCR
-          </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg border-[var(--fw-border)] hover:border-[var(--fw-border-strong)]" onClick={() => fileInputRef.current?.click()}>
             <Upload className="h-3.5 w-3.5 mr-1.5" /> Import CSV
           </Button>
@@ -1575,7 +1592,7 @@ function BudgetDetailCard({ b, tier, onUpdate }: { b: BudgetItem; tier: Tier; on
 }
 
 // ═══ View: Goals ══════════════════════════════════════════════════════
-function GoalsView({ goals }: { goals: GoalItem[] }) {
+function GoalsView({ goals, onSimulationComplete }: { goals: GoalItem[]; onSimulationComplete?: () => void }) {
   const [simulating, setSimulating] = useState<string | null>(null)
   const [simResult, setSimResult] = useState<any>(null)
 
@@ -1584,12 +1601,14 @@ function GoalsView({ goals }: { goals: GoalItem[] }) {
     try {
       const res = await fetch('/api/simulation', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ goalId, additionalMonthlyCents, trials: 1000 }),
       })
       const d = await res.json()
       if (d.ok) {
         setSimResult(d)
+        onSimulationComplete?.()
         toast.success('Monte Carlo simulation complete', {
           description: `Median: ${d.medianMonths} months · 80% CI: ${d.p10Months}-${d.p90Months}`,
         })
@@ -1866,13 +1885,16 @@ function ChatPanel(props: {
   input: string
   setInput: (s: string) => void
   chatLoading: boolean
-  sendChat: (text?: string) => void
-  scrollRef: React.RefObject<HTMLDivElement>
+  sendChat: (text?: string, confirmed?: boolean) => void
+  scrollRef: React.RefObject<HTMLDivElement | null>
   quickPrompts: { label: string; text: string }[]
   privacyMode: boolean
   onClose: () => void
+  pendingConfirm: { message: string; writes: { name: string; args: any }[] } | null
+  onConfirm: () => void
+  onCancel: () => void
 }) {
-  const { messages, input, setInput, chatLoading, sendChat, scrollRef, quickPrompts, privacyMode, onClose } = props
+  const { messages, input, setInput, chatLoading, sendChat, scrollRef, quickPrompts, privacyMode, onClose, pendingConfirm, onConfirm, onCancel } = props
   return (
     <>
       <div className="flex items-center justify-between px-4 h-12 border-b border-[var(--fw-border)] bg-[var(--fw-surface)] flex-shrink-0">
@@ -1887,7 +1909,7 @@ function ChatPanel(props: {
         </div>
         <div className="flex items-center gap-1.5">
           <span className={`h-1.5 w-1.5 rounded-full ${privacyMode ? 'bg-[var(--fw-accent)]' : 'bg-[var(--fw-positive)]'} fw-pulse`} />
-          <span className="text-[10px] font-medium text-[var(--fw-text-2)] mr-1.5">{privacyMode ? 'Local' : 'Cloud'}</span>
+          <span className="text-[10px] font-medium text-[var(--fw-text-2)] mr-1.5">{privacyMode ? 'On-device' : 'Cloud LLM'}</span>
           <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-[var(--fw-surface-2)]" onClick={onClose}>
             <XIcon className="h-3.5 w-3.5 text-[var(--fw-text-3)]" />
           </Button>
@@ -1910,6 +1932,19 @@ function ChatPanel(props: {
           )}
         </div>
       </div>
+
+      {pendingConfirm && (
+        <div className="px-4 py-3 border-t border-[var(--fw-accent-border)] bg-[var(--fw-accent-soft)] flex-shrink-0">
+          <div className="text-[12px] font-medium mb-1">Confirm this change</div>
+          <div className="text-[11px] text-[var(--fw-text-3)] mb-2">
+            {pendingConfirm.writes.map((w) => w.name.replace(/_/g, ' ')).join(', ') || 'Write'} — this updates your records.
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" className="h-8 text-[11px] rounded-lg bg-[var(--fw-accent)] text-white" onClick={onConfirm}>Confirm</Button>
+            <Button size="sm" variant="outline" className="h-8 text-[11px] rounded-lg" onClick={onCancel}>Cancel</Button>
+          </div>
+        </div>
+      )}
 
       {messages.length <= 1 && (
         <div className="px-4 py-3 border-t border-[var(--fw-border)] bg-[var(--fw-surface-2)]/30 flex-shrink-0">
@@ -3245,7 +3280,7 @@ function PlanningView({ debtData, billsData, smartInsights, loading, onRefresh, 
         document.body.removeChild(a)
         toast.success('CSV export downloaded')
       } else {
-        const res = await fetch('/api/export?format=summary&range=12m')
+        const res = await fetch('/api/export?format=summary&range=12m', { credentials: 'include' })
         const d = await res.json()
         if (d.ok) {
           toast.success('Summary report generated', {
@@ -4043,12 +4078,11 @@ function InnovationView({ data, loading, onRefresh }: {
 }
 
 // ═══ View: Settings ═══════════════════════════════════════════════════
-function SettingsView({ data, loading, onRefresh, onUpdate, onSeed, tier, setTier, privacyMode, setPrivacyMode, currencyInfo }: {
+function SettingsView({ data, loading, onRefresh, onUpdate, tier, setTier, privacyMode, setPrivacyMode, currencyInfo }: {
   data: any
   loading: boolean
   onRefresh: () => void
   onUpdate: (updates: any) => Promise<boolean>
-  onSeed: () => void
   tier: Tier
   setTier: (t: Tier) => void
   privacyMode: boolean
@@ -4056,8 +4090,6 @@ function SettingsView({ data, loading, onRefresh, onUpdate, onSeed, tier, setTie
   currencyInfo: any
 }) {
   const [localName, setLocalName] = useState<string | null>(null)
-  const [confirmReset, setConfirmReset] = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState(false)
 
   if (loading || !data) {
     return (
@@ -4074,12 +4106,6 @@ function SettingsView({ data, loading, onRefresh, onUpdate, onSeed, tier, setTie
   const handleSaveName = async () => {
     await onUpdate({ displayName: displayName, name: displayName })
     setLocalName(null) // reset to use settings value after save
-  }
-
-  const handleReset = async () => {
-    setConfirmReset(false)
-    await onSeed()
-    onRefresh()
   }
 
   return (
@@ -4119,7 +4145,7 @@ function SettingsView({ data, loading, onRefresh, onUpdate, onSeed, tier, setTie
           <div>
             <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Email</label>
             <Input
-              value={data.user?.email || 'demo@example.com'}
+              value={data.user?.email || ''}
               disabled
               className="h-9 text-[13px] border-[var(--fw-border)] bg-[var(--fw-surface-2)] rounded-lg opacity-60"
             />
@@ -4388,7 +4414,7 @@ function SettingsView({ data, loading, onRefresh, onUpdate, onSeed, tier, setTie
           <h2 className="text-[14px] font-semibold">LLM Provider</h2>
           <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded bg-[var(--fw-accent-soft)] text-[var(--fw-accent)] border border-[var(--fw-accent-border)] uppercase tracking-wider">Advanced</span>
         </div>
-        <p className="text-[11px] text-[var(--fw-text-3)] mb-4">Choose which AI model powers the FinWise agent. Default is Z.ai (no API key needed).</p>
+        <p className="text-[11px] text-[var(--fw-text-3)] mb-4">Choose which model rewrites agent answers. If the provider is unavailable, FinWise answers from database tools instead.</p>
         <div className="space-y-3">
           <div>
             <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Provider</label>
@@ -4397,7 +4423,7 @@ function SettingsView({ data, loading, onRefresh, onUpdate, onSeed, tier, setTie
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="zai">Z.ai (Default — no API key needed)</SelectItem>
+                <SelectItem value="zai">Z.ai (host default; falls back if unavailable)</SelectItem>
                 <SelectItem value="openai">OpenAI (GPT-4o, GPT-4, etc.)</SelectItem>
                 <SelectItem value="anthropic">Anthropic (Claude 3.5 Sonnet, etc.)</SelectItem>
                 <SelectItem value="custom">Custom (Ollama, LM Studio, any OpenAI-compatible)</SelectItem>
@@ -4523,8 +4549,8 @@ function SettingsView({ data, loading, onRefresh, onUpdate, onSeed, tier, setTie
         <div className="space-y-1">
           <div className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-[var(--fw-surface-2)] transition-colors">
             <div>
-              <div className="text-[12px] font-medium">Privacy mode (local PII scrubbing)</div>
-              <div className="text-[10px] text-[var(--fw-text-3)]">Flag PII for local scrubbing before any cloud LLM call</div>
+              <div className="text-[12px] font-medium">On-device answers</div>
+              <div className="text-[10px] text-[var(--fw-text-3)]">Skip the cloud LLM. The agent answers from your database tools only.</div>
             </div>
             <Switch
               checked={privacyMode}
@@ -4538,7 +4564,7 @@ function SettingsView({ data, loading, onRefresh, onUpdate, onSeed, tier, setTie
           <div className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-[var(--fw-surface-2)] transition-colors">
             <div>
               <div className="text-[12px] font-medium">Share anonymized data for peer benchmarking</div>
-              <div className="text-[10px] text-[var(--fw-text-3)]">Your aggregated statistics contribute to anonymous peer comparisons (CCPA-compliant)</div>
+              <div className="text-[10px] text-[var(--fw-text-3)]">Optional preference only. No peer benchmarking is implemented yet.</div>
             </div>
             <Switch
               checked={s.shareAggregates ?? true}
@@ -4549,9 +4575,9 @@ function SettingsView({ data, loading, onRefresh, onUpdate, onSeed, tier, setTie
           <div className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-[var(--fw-surface-2)] transition-colors">
             <div>
               <div className="text-[12px] font-medium">Default permission tier</div>
-              <div className="text-[10px] text-[var(--fw-text-3)]">Controls what actions you can perform (Viewer = read-only, Editor = modify, Approver = full access)</div>
+              <div className="text-[10px] text-[var(--fw-text-3)]">Viewer is read-only. Editor can add and edit transactions, budgets, and goals.</div>
             </div>
-            <Select value={tier} onValueChange={(v) => {
+            <Select value={tier === 'Approver' ? 'Editor' : tier} onValueChange={(v) => {
               setTier(v as Tier)
               onUpdate({ tier: v })
             }}>
@@ -4561,7 +4587,6 @@ function SettingsView({ data, loading, onRefresh, onUpdate, onSeed, tier, setTie
               <SelectContent>
                 <SelectItem value="Viewer">Viewer</SelectItem>
                 <SelectItem value="Editor">Editor</SelectItem>
-                <SelectItem value="Approver">Approver</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -4598,33 +4623,9 @@ function SettingsView({ data, loading, onRefresh, onUpdate, onSeed, tier, setTie
             </Button>
           </div>
 
-          <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--fw-warning-soft)] border border-[var(--fw-warning-border)]">
-            <div>
-              <div className="text-[12px] font-medium">Reset all data</div>
-              <div className="text-[10px] text-[var(--fw-text-3)]">Regenerate synthetic transactions, goals, and recommendations. This cannot be undone.</div>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-[11px] rounded-lg border-[var(--fw-warning-border)] text-[var(--fw-warning)] hover:bg-[var(--fw-warning-soft)]"
-              onClick={() => setConfirmReset(true)}
-            >
-              <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Reset
-            </Button>
+          <div className="p-3 rounded-lg bg-[var(--fw-surface-2)] border border-[var(--fw-border)] text-[11px] text-[var(--fw-text-3)]">
+            Sample-data reset is disabled. Add transactions with chat or CSV import. Debts are added on the Planning page.
           </div>
-
-          {confirmReset && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setConfirmReset(false)}>
-              <div className="bg-[var(--fw-surface)] rounded-xl p-5 w-96 border border-[var(--fw-border)] shadow-[var(--fw-shadow-lg)]" onClick={(e) => e.stopPropagation()}>
-                <div className="text-sm font-semibold mb-2">Reset all data?</div>
-                <div className="text-[11px] text-[var(--fw-text-3)] mb-4">This will delete all current transactions, budgets, goals, and recommendations, then generate fresh synthetic data. This action cannot be undone.</div>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="flex-1 rounded-lg" onClick={() => setConfirmReset(false)}>Cancel</Button>
-                  <Button size="sm" className="flex-1 bg-[var(--fw-warning)] hover:opacity-90 text-white rounded-lg" onClick={handleReset}>Yes, reset</Button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </Card>
 
@@ -4661,7 +4662,7 @@ function SettingsView({ data, loading, onRefresh, onUpdate, onSeed, tier, setTie
 }
 
 // ═══ Landing Page ════════════════════════════════════════════════════
-function LandingPage({ onGetStarted, onDemo }: { onGetStarted: () => void; onDemo: () => void }) {
+function LandingPage({ onGetStarted, onSignIn }: { onGetStarted: () => void; onSignIn: () => void }) {
   return (
     <div className="min-h-screen bg-[var(--fw-bg)] text-[var(--fw-text)]">
       {/* Nav */}
@@ -4676,8 +4677,8 @@ function LandingPage({ onGetStarted, onDemo }: { onGetStarted: () => void; onDem
           <span className="text-[18px] font-semibold tracking-tight">FinWise</span>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={onDemo} className="text-[13px] font-medium text-[var(--fw-text-2)] hover:text-[var(--fw-text)] transition-colors">
-            Try Demo
+          <button onClick={onSignIn} className="text-[13px] font-medium text-[var(--fw-text-2)] hover:text-[var(--fw-text)] transition-colors">
+            Sign in
           </button>
           <Button onClick={onGetStarted} size="sm" className="h-9 px-4 bg-gradient-to-r from-[var(--fw-accent)] to-[var(--fw-accent-hover)] text-white rounded-lg shadow-[var(--fw-shadow-glow)] text-[13px] font-medium">
             Get Started <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
@@ -4704,8 +4705,8 @@ function LandingPage({ onGetStarted, onDemo }: { onGetStarted: () => void; onDem
           <Button onClick={onGetStarted} size="lg" className="h-12 px-6 bg-gradient-to-r from-[var(--fw-accent)] to-[var(--fw-accent-hover)] text-white rounded-xl shadow-[var(--fw-shadow-glow)] text-[14px] font-semibold">
             Create Free Account <ArrowRight className="h-4 w-4 ml-2" />
           </Button>
-          <Button onClick={onDemo} variant="outline" size="lg" className="h-12 px-6 border-[var(--fw-border)] text-[14px] font-medium rounded-xl">
-            Try Live Demo
+          <Button onClick={onSignIn} variant="outline" size="lg" className="h-12 px-6 border-[var(--fw-border)] text-[14px] font-medium rounded-xl">
+            Sign in
           </Button>
         </div>
         <div className="mt-12 flex items-center justify-center gap-8 text-[11px] text-[var(--fw-text-3)]">
@@ -4729,7 +4730,7 @@ function LandingPage({ onGetStarted, onDemo }: { onGetStarted: () => void; onDem
             { icon: Dna, title: 'Personality DNA', desc: 'Discover your financial archetype — Architect, Free Spirit, Climber, Guardian, or Explorer — with personalized recommendations.' },
             { icon: CreditCard, title: 'Debt Payoff Planner', desc: 'Compare Avalanche vs Snowball strategies with month-by-month simulation. See exactly when you\'ll be debt-free.' },
             { icon: Globe, title: '166 World Currencies', desc: 'Switch between any world currency with live exchange rates. All amounts auto-convert instantly across the entire app.' },
-            { icon: ShieldIcon, title: '3-Tier Permissions', desc: 'Viewer (read-only), Editor (modify data), Approver (full access). Privacy mode with local PII scrubbing support.' },
+            { icon: ShieldIcon, title: 'Viewer and Editor access', desc: 'Viewer is read-only. Editor can add and edit your own records. On-device mode answers from your data without calling a cloud LLM.' },
             { icon: RocketIcon, title: 'Innovation Lab', desc: '5 novel features: Future Self Simulator, Behavioral Triggers, Time-Value Calculator, Goal Collisions, and more.' },
           ].map((f, i) => (
             <div key={i} className="p-5 rounded-2xl border border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] hover:shadow-[var(--fw-shadow-md)] transition-shadow">
@@ -4752,8 +4753,8 @@ function LandingPage({ onGetStarted, onDemo }: { onGetStarted: () => void; onDem
             <Button onClick={onGetStarted} size="lg" className="h-12 px-6 bg-gradient-to-r from-[var(--fw-accent)] to-[var(--fw-accent-hover)] text-white rounded-xl shadow-[var(--fw-shadow-glow)] text-[14px] font-semibold">
               Get Started Free <ArrowRight className="h-4 w-4 ml-2" />
             </Button>
-            <Button onClick={onDemo} variant="outline" size="lg" className="h-12 px-6 border-[var(--fw-border)] text-[14px] font-medium rounded-xl">
-              Explore Demo
+            <Button onClick={onSignIn} variant="outline" size="lg" className="h-12 px-6 border-[var(--fw-border)] text-[14px] font-medium rounded-xl">
+              Sign in
             </Button>
           </div>
         </div>
@@ -4845,7 +4846,7 @@ const COUNTRY_CURRENCY_MAP: Record<string, { currency: string; name: string; fla
 // Password strength calculator
 function getPasswordStrength(password: string): { score: number; label: string; color: string } {
   let score = 0
-  if (password.length >= 6) score++
+  if (password.length >= 8) score++
   if (password.length >= 10) score++
   if (/[A-Z]/.test(password)) score++
   if (/[a-z]/.test(password)) score++
@@ -4859,18 +4860,18 @@ function getPasswordStrength(password: string): { score: number; label: string; 
 }
 
 // ═══ Auth Page (Professional with First/Last Name, Country, Password Strength) ═
-function AuthPage({ mode, setMode, onAuth, loading, onBack, onDemo }: {
+function AuthPage({ mode, setMode, onAuth, loading, onBack }: {
   mode: 'login' | 'signup'
   setMode: (m: 'login' | 'signup') => void
-  onAuth: (action: 'login' | 'signup' | 'demo', email?: string, password?: string, name?: string) => void
+  onAuth: (action: 'login' | 'signup', email?: string, password?: string, name?: string, currency?: string) => Promise<{ ok: boolean; error?: string; field?: string }>
   loading: boolean
   onBack: () => void
-  onDemo: () => void
 }) {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [country, setCountry] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [apiError, setApiError] = useState('')
@@ -4891,7 +4892,13 @@ function AuthPage({ mode, setMode, onAuth, loading, onBack, onDemo }: {
     if (!email.trim()) errs.email = 'Email is required'
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.email = 'Enter a valid email address'
     if (!password) errs.password = 'Password is required'
-    else if (password.length < 6) errs.password = 'Password must be at least 6 characters'
+    else if (mode === 'signup') {
+      if (password.length < 8) errs.password = 'Password must be at least 8 characters'
+      else if (!/[a-zA-Z]/.test(password)) errs.password = 'Password must contain at least one letter'
+      else if (!/[0-9]/.test(password)) errs.password = 'Password must contain at least one number'
+      else if (password.length > 128) errs.password = 'Password is too long'
+      else if (confirmPassword !== password) errs.confirmPassword = 'Passwords do not match'
+    }
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -4902,7 +4909,19 @@ function AuthPage({ mode, setMode, onAuth, loading, onBack, onDemo }: {
     setErrors({})
     setApiError('')
     const fullName = `${firstName.trim()} ${lastName.trim()}`.trim()
-    onAuth(mode, email, password, mode === 'signup' ? fullName : undefined)
+    const result = await onAuth(
+      mode,
+      email.trim(),
+      password,
+      mode === 'signup' ? fullName : undefined,
+      mode === 'signup' ? selectedCountry?.currency : undefined,
+    )
+    if (!result.ok) {
+      if (result.field && ['name', 'email', 'password'].includes(result.field)) {
+        setErrors({ [result.field === 'name' ? 'firstName' : result.field]: result.error || '' })
+      }
+      setApiError(result.error || 'Authentication failed')
+    }
   }
 
   return (
@@ -4974,7 +4993,7 @@ function AuthPage({ mode, setMode, onAuth, loading, onBack, onDemo }: {
             {mode === 'signup' ? 'Create your account' : 'Sign in'}
           </h2>
           <p className="text-[13px] text-[var(--fw-text-3)] mb-6">
-            {mode === 'signup' ? 'Start with a fresh account — no demo data, just your real finances.' : 'Welcome back. Enter your credentials to continue.'}
+            {mode === 'signup' ? 'Start with a fresh account and track your real finances.' : 'Welcome back. Enter your credentials to continue.'}
           </p>
 
           {/* API Error banner */}
@@ -4996,6 +5015,7 @@ function AuthPage({ mode, setMode, onAuth, loading, onBack, onDemo }: {
                       value={firstName}
                       onChange={(e) => { setFirstName(e.target.value); if (errors.firstName) setErrors({ ...errors, firstName: '' }) }}
                       placeholder="John"
+                      autoComplete="given-name"
                       className={`h-11 text-[13px] bg-[var(--fw-surface-2)] rounded-lg ${errors.firstName ? 'border-red-400' : 'border-[var(--fw-border)]'}`}
                     />
                     {errors.firstName && <p className="text-[11px] text-red-500 mt-1">{errors.firstName}</p>}
@@ -5006,6 +5026,7 @@ function AuthPage({ mode, setMode, onAuth, loading, onBack, onDemo }: {
                       value={lastName}
                       onChange={(e) => { setLastName(e.target.value); if (errors.lastName) setErrors({ ...errors, lastName: '' }) }}
                       placeholder="Doe"
+                      autoComplete="family-name"
                       className={`h-11 text-[13px] bg-[var(--fw-surface-2)] rounded-lg ${errors.lastName ? 'border-red-400' : 'border-[var(--fw-border)]'}`}
                     />
                     {errors.lastName && <p className="text-[11px] text-red-500 mt-1">{errors.lastName}</p>}
@@ -5048,6 +5069,7 @@ function AuthPage({ mode, setMode, onAuth, loading, onBack, onDemo }: {
                   onChange={(e) => { setEmail(e.target.value); if (errors.email) setErrors({ ...errors, email: '' }); setApiError('') }}
                   type="email"
                   placeholder="you@example.com"
+                  autoComplete="email"
                   className={`h-11 pl-10 text-[13px] bg-[var(--fw-surface-2)] rounded-lg ${errors.email || apiError ? 'border-red-400' : 'border-[var(--fw-border)]'}`}
                 />
               </div>
@@ -5061,9 +5083,10 @@ function AuthPage({ mode, setMode, onAuth, loading, onBack, onDemo }: {
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--fw-text-3)]" />
                 <Input
                   value={password}
-                  onChange={(e) => { setPassword(e.target.value); if (errors.password) setErrors({ ...errors, password: '' }) }}
+                  onChange={(e) => { setPassword(e.target.value); if (errors.password) setErrors({ ...errors, password: '' }); setApiError('') }}
                   type={showPassword ? 'text' : 'password'}
                   placeholder="••••••••"
+                  autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                   className={`h-11 pl-10 pr-10 text-[13px] bg-[var(--fw-surface-2)] rounded-lg ${errors.password ? 'border-red-400' : 'border-[var(--fw-border)]'}`}
                 />
                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--fw-text-3)] hover:text-[var(--fw-text)] text-[11px] font-medium">
@@ -5084,7 +5107,7 @@ function AuthPage({ mode, setMode, onAuth, loading, onBack, onDemo }: {
                     ))}
                   </div>
                   <div className="flex items-center justify-between mt-1">
-                    <span className="text-[10px] text-[var(--fw-text-3)]">Min 6 characters</span>
+                    <span className="text-[10px] text-[var(--fw-text-3)]">Min 8 characters, 1 letter + 1 number</span>
                     {pwStrength && (
                       <span className="text-[10px] font-semibold" style={{ color: pwStrength.color }}>{pwStrength.label}</span>
                     )}
@@ -5093,27 +5116,47 @@ function AuthPage({ mode, setMode, onAuth, loading, onBack, onDemo }: {
               )}
             </div>
 
+            {/* Confirm password (signup only) */}
+            {mode === 'signup' && (
+              <div>
+                <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Confirm Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--fw-text-3)]" />
+                  <Input
+                    value={confirmPassword}
+                    onChange={(e) => { setConfirmPassword(e.target.value); if (errors.confirmPassword) setErrors({ ...errors, confirmPassword: '' }) }}
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    autoComplete="new-password"
+                    className={`h-11 pl-10 pr-10 text-[13px] bg-[var(--fw-surface-2)] rounded-lg ${errors.confirmPassword ? 'border-red-400' : 'border-[var(--fw-border)]'}`}
+                  />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--fw-text-3)] hover:text-[var(--fw-text)] text-[11px] font-medium">
+                    {showPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                {errors.confirmPassword && <p className="text-[11px] text-red-500 mt-1">{errors.confirmPassword}</p>}
+              </div>
+            )}
+
             <Button type="submit" disabled={loading} className="w-full h-11 mt-2 bg-gradient-to-r from-[var(--fw-accent)] to-[var(--fw-accent-hover)] text-white rounded-lg text-[13px] font-semibold shadow-[var(--fw-shadow-glow)]">
-              {loading ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : (mode === 'signup' ? 'Create Account' : 'Sign In')}
+              {loading
+                ? <Loader2 className="h-4 w-4 animate-spin mx-auto" />
+                : (mode === 'signup' ? 'Create Account' : 'Sign In')}
             </Button>
           </form>
-
-          {/* Divider */}
-          <div className="flex items-center gap-3 my-5">
-            <div className="flex-1 h-px bg-[var(--fw-border)]" />
-            <span className="text-[10px] text-[var(--fw-text-3)] uppercase tracking-wider">or</span>
-            <div className="flex-1 h-px bg-[var(--fw-border)]" />
-          </div>
-
-          {/* Demo button */}
-          <Button onClick={onDemo} variant="outline" className="w-full h-11 border-[var(--fw-border)] text-[13px] font-medium rounded-lg">
-            <Zap className="h-4 w-4 mr-1.5 text-[var(--fw-accent)]" /> Try Demo (with sample data)
-          </Button>
 
           {/* Switch mode */}
           <div className="text-center mt-6 text-[12px] text-[var(--fw-text-3)]">
             {mode === 'signup' ? 'Already have an account? ' : "Don't have an account? "}
-            <button onClick={() => { setMode(mode === 'signup' ? 'login' : 'signup'); setErrors({}); setApiError('') }} className="text-[var(--fw-accent)] font-medium hover:underline">
+            <button type="button" onClick={() => {
+              const next = mode === 'signup' ? 'login' : 'signup'
+              setMode(next)
+              setErrors({})
+              setApiError('')
+              setPassword('')
+              setConfirmPassword('')
+              setShowPassword(false)
+            }} className="text-[var(--fw-accent)] font-medium hover:underline">
               {mode === 'signup' ? 'Sign in' : 'Sign up free'}
             </button>
           </div>
@@ -5137,8 +5180,8 @@ function OnboardingPage({ userName, tasks, completedTasks, onComplete, onSkip }:
     {
       title: `Welcome to FinWise, ${userName}!`,
       icon: Sparkles2,
-      description: 'Your account is ready with a fresh start — no demo data. Let\'s take a quick tour to learn how FinWise works.',
-      highlights: ['AI Agent that understands natural language', '20+ advanced financial features', '166 world currencies with live conversion', '5 novel innovation features you won\'t find anywhere else'],
+      description: 'Your account is ready with a fresh start. Let\'s take a quick tour to learn how FinWise works.',
+      highlights: ['Agent chat that can add transactions, budgets, and goals', 'Budgets, goals, and CSV import on your own data', 'Currency display using live FX rates when available', 'Analytics and planning tools based on your records'],
     },
     {
       title: 'Step 1: Your Overview Dashboard',
@@ -5167,17 +5210,17 @@ function OnboardingPage({ userName, tasks, completedTasks, onComplete, onSkip }:
     {
       title: 'Step 5: Advanced Analytics & Innovation',
       icon: BrainIcon,
-      description: 'FinWise includes features no other finance app has. Explore the Analytics and Innovation Lab views for deep insights.',
-      highlights: ['Financial Health Score: composite 0-100 metric across 5 factors', 'Cash Flow Forecast: 14-day Holt-Winters prediction with confidence bounds', 'Personality DNA: discover your financial archetype (Architect, Free Spirit, etc.)', 'Future Self Simulator: project your net worth at age 30, 40, 50, 65'],
+      description: 'Analytics and Innovation Lab are experimental tools. They use your transactions plus stated assumptions (return rate, age, inflation).',
+      highlights: ['Financial Health Score: weighted 0-100 from savings, budget, and goals', 'Cash flow forecast: short-horizon smoothing, not a bank-grade model', 'Personality scores are heuristics from spending mix', 'Future Self uses your savings rate and the return/inflation you set'],
     },
     {
       title: 'Step 6: Settings & Customization',
       icon: Settings,
       description: 'Customize FinWise to your needs. Change currency (166 options with live rates), toggle dark mode, configure the agent, and more.',
-      highlights: ['166 world currencies with live exchange rate conversion', 'Dark/light theme toggle', 'Agent response style: professional, casual, or detailed', 'Analytics parameters: adjust return rate, inflation, volatility', '3-tier permission system: Viewer, Editor, Approver'],
+      highlights: ['Display currency with live FX rates when the rate API is available', 'Dark/light theme toggle', 'Agent response style and write confirmation', 'Analytics parameters: return rate, inflation, volatility', 'Viewer (read-only) or Editor (can change records)'],
     },
     {
-      title: 'You\'re all set! 🎉',
+      title: 'You\'re all set',
       icon: CheckCircle,
       description: 'You now know how to use FinWise. Start by adding a few transactions via the agent chat, then explore the Analytics and Innovation Lab views. Your financial journey starts now.',
       highlights: ['Add transactions by chatting with the agent', 'Set up budgets and savings goals', 'Check your Financial Health Score', 'Discover your Financial Personality DNA'],
@@ -5269,7 +5312,7 @@ function OnboardingPage({ userName, tasks, completedTasks, onComplete, onSkip }:
           <div className="flex items-start gap-2">
             <Info className="h-4 w-4 text-[var(--fw-accent)] flex-shrink-0 mt-0.5" />
             <div className="text-[11px] text-[var(--fw-text-2)] leading-relaxed">
-              Your account starts completely empty — no demo data. Add your first transaction by typing something like "I spent $25 on coffee at Blue Bottle' in the agent chat after the tour.
+              Your account starts completely empty. Add your first transaction by typing something like "I spent $25 on coffee at Blue Bottle' in the agent chat after the tour.
             </div>
           </div>
         </div>

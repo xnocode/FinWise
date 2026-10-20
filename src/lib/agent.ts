@@ -1,6 +1,7 @@
-// Maya Agent — Personal Finance Copilot
+// FinWise Agent — Personal Finance Copilot
 // Implements a supervisor-worker pattern with tool calling
 import { db } from '@/lib/db'
+import { convertToUsdCents } from '@/lib/rates'
 import type { Transaction, Category, Budget, Goal, Recommendation } from '@prisma/client'
 
 // ─── Tool implementations ───────────────────────────────────────────────
@@ -294,12 +295,14 @@ async function findOrCreateCategory(ctx: ToolContext, categoryText: string): Pro
 }
 
 async function addTransaction(ctx: ToolContext, args: {
-  amount: number           // in cents
+  amount: number           // in cents (USD)
   merchant: string
   category?: string
   date?: string            // ISO date
   direction?: 'debit' | 'credit'
   memo?: string
+  displayAmount?: number   // amount as the user stated it (their currency)
+  displayCurrency?: string // currency the user stated (e.g. 'BDT')
 }): Promise<ToolResult> {
   if (ctx.tier === 'Viewer') {
     return { tool: 'add_transaction', success: false, data: null, summary: 'Permission denied: Viewer tier cannot add transactions' }
@@ -334,6 +337,10 @@ async function addTransaction(ctx: ToolContext, args: {
     },
     include: { category: true },
   })
+  // Show the amount in the currency the user spoke in (fall back to USD)
+  const shownAmount = args.displayAmount != null
+    ? `${args.displayCurrency || 'USD'} ${args.displayAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : `$${(args.amount / 100).toFixed(2)}`
   return {
     tool: 'add_transaction',
     success: true,
@@ -341,7 +348,7 @@ async function addTransaction(ctx: ToolContext, args: {
       id: tx.id, merchant: tx.merchantRaw, amountCents: tx.amountCents,
       direction: tx.direction, category: tx.category.name, date: tx.date.toISOString().split('T')[0],
     },
-    summary: `Added ${direction === 'credit' ? 'income' : 'expense'}: ${args.merchant} for $${(args.amount / 100).toFixed(2)} in category ${tx.category.name}`,
+    summary: `Added ${direction === 'credit' ? 'income' : 'expense'}: ${args.merchant} for ${shownAmount} in category ${tx.category.name}`,
   }
 }
 
@@ -482,39 +489,69 @@ export const TOOL_SCHEMAS = Object.entries(TOOLS).map(([name, t]) => ({
   description: t.desc,
 }))
 
+export const WRITE_TOOL_NAMES = [
+  'add_transaction',
+  'create_goal',
+  'update_budget',
+  'delete_transaction',
+  'categorize_merchant',
+]
+
 // ─── Intent router (the Supervisor) ──────────────────────────────────────
 
-async function routeIntent(message: string, ctx: ToolContext): Promise<{
+export async function routeIntent(message: string, ctx: ToolContext): Promise<{
   mode: 'quick_qa' | 'monthly_review' | 'goal_planning' | 'write'
   tools: { name: string; args: any }[]
 }> {
   const lower = message.toLowerCase()
 
   // ─── WRITE intents — detect add/create/update/delete commands ────
-  // Add transaction: "I spent $50 on coffee at Blue Bottle"
-  const spendMatch = message.match(/(?:i\s+(?:spent|paid|bought|purchased)|add|log|record)[^$]*\$?\s*(\d+(?:\.\d{1,2})?)/i)
-  if (spendMatch && /\b(spent|paid|bought|purchased|spent|expense)\b/i.test(lower)) {
-    const amountCents = Math.round(parseFloat(spendMatch[1]) * 100)
-    // Extract merchant — usually after "at" or "from" — match until end of string or terminator word
-    const merchantMatch = message.match(/(?:at|from|@)\s+([A-Z][\w\s&'-]+?)(?:\s+(?:for|in|on|today|yesterday|contributing|with|by)|[.,;]|$)/i)
-    const merchant = merchantMatch && merchantMatch[1] ? merchantMatch[1].trim() : 'Unknown Merchant'
-    // Smart category inference from "on X" pattern (e.g. "on groceries", "on coffee", "on gas")
-    const onMatch = message.match(/\bon\s+(\w+)/i)
+  // Add transaction: "I spent $50 on coffee at Blue Bottle", "add 50 taka for ricksha"
+  const numMatch = message.match(/(\d+(?:\.\d{1,2})?)/)
+  const actionVerb = /\b(?:add|log|record)\b/i.test(message)
+  const spendVerb = /\b(?:spent|spend|paid|pay|bought|buy|purchased|purchase|earned|received|deposit(?:ed)?)\b/i.test(message)
+  const questionStart = /^(?:how|what|why|when|where|which|who|did|do|does|is|are|was|were|should|would|could|will)\b/i.test(message.trim())
+  const isWriteRequest = Boolean(numMatch) && !/\b(?:goal|budget|envelope)\b/i.test(message) && (actionVerb || (spendVerb && !questionStart))
+  if (isWriteRequest && numMatch) {
+    const rawAmount = parseFloat(numMatch[1])
+    // Currency: an explicit mention (৳/$/€/£/₹/¥ or name) wins, else the user's display currency
+    const CUR_PATTERNS: { code: string; re: RegExp }[] = [
+      { code: 'BDT', re: /[৳]|\b(?:taka|bdt)\b/i },
+      { code: 'USD', re: /[$]|\b(?:usd|dollars?)\b/i },
+      { code: 'EUR', re: /[€]|\b(?:eur|euros?)\b/i },
+      { code: 'GBP', re: /[£]|\b(?:gbp|pounds?)\b/i },
+      { code: 'INR', re: /[₹]|\b(?:inr|rupees?)\b/i },
+      { code: 'JPY', re: /[¥]|\b(?:jpy|yen)\b/i },
+    ]
+    let fromCode = CUR_PATTERNS.find(p => p.re.test(message))?.code
+    if (!fromCode) {
+      const u = await db.user.findUnique({ where: { id: ctx.userId }, include: { settings: true } })
+      fromCode = u?.settings?.currency || 'USD'
+    }
+    const amountCents = await convertToUsdCents(rawAmount, fromCode)
+    // Merchant — after "at", "from", "@" or "for" — until end or terminator word
+    const merchantMatch = message.match(/(?:at|from|@|for)\s+([A-Z][\w\s&'-]+?)(?:\s+(?:for|in|on|today|yesterday|contributing|with|by)|[.,;]|$)/i)
+    const merchantRaw = merchantMatch && merchantMatch[1] ? merchantMatch[1].trim() : ''
+    const merchant = merchantRaw && !/\b(?:category|bucket|envelope)\b/i.test(merchantRaw) ? merchantRaw : 'Unknown Merchant'
+    // Smart category inference — "on X" first, then scan all words
+    const categoryMap: Record<string, string> = {
+      groceries: 'Groceries', grocery: 'Groceries', food: 'Groceries',
+      coffee: 'Dining', lunch: 'Dining', dinner: 'Dining', dining: 'Dining', restaurant: 'Dining',
+      gas: 'Transport', fuel: 'Transport', uber: 'Transport', lyft: 'Transport', transport: 'Transport',
+      rickshaw: 'Transport', ricksha: 'Transport', taxi: 'Transport', bus: 'Transport', train: 'Transport',
+      rent: 'Rent', utilities: 'Utilities', electric: 'Utilities',
+      entertainment: 'Entertainment', movie: 'Entertainment', movies: 'Entertainment',
+      shopping: 'Shopping', clothes: 'Shopping', clothing: 'Shopping',
+      health: 'Health', medical: 'Health', doctor: 'Health', pharmacy: 'Health',
+      subscription: 'Subscriptions', subscriptions: 'Subscriptions', netflix: 'Subscriptions', spotify: 'Subscriptions',
+    }
     let category: string | undefined
-    if (onMatch) {
-      const word = onMatch[1].toLowerCase()
-      // Map common spending words to categories
-      const categoryMap: Record<string, string> = {
-        groceries: 'Groceries', grocery: 'Groceries', food: 'Groceries',
-        coffee: 'Dining', lunch: 'Dining', dinner: 'Dining', dining: 'Dining', restaurant: 'Dining',
-        gas: 'Transport', fuel: 'Transport', uber: 'Transport', lyft: 'Transport', transport: 'Transport',
-        rent: 'Rent', utilities: 'Utilities', electric: 'Utilities',
-        entertainment: 'Entertainment', movie: 'Entertainment', movies: 'Entertainment',
-        shopping: 'Shopping', clothes: 'Shopping', clothing: 'Shopping',
-        health: 'Health', medical: 'Health', doctor: 'Health', pharmacy: 'Health',
-        subscription: 'Subscriptions', subscriptions: 'Subscriptions', netflix: 'Subscriptions', spotify: 'Subscriptions',
+    const onWord = message.match(/\bon\s+(\w+)/i)?.[1]?.toLowerCase()
+    if (onWord && categoryMap[onWord]) category = categoryMap[onWord]
+    if (!category) {
+      for (const w of lower.match(/[a-z']+/g) || []) {
+        if (categoryMap[w]) { category = categoryMap[w]; break }
       }
-      if (categoryMap[word]) category = categoryMap[word]
     }
     // Explicit category override
     const categoryMatch = message.match(/(?:in|for)\s+(?:the\s+)?(\w+)\s+(?:category|bucket|envelope)/i)
@@ -531,6 +568,8 @@ async function routeIntent(message: string, ctx: ToolContext): Promise<{
           category,
           direction: isIncome ? 'credit' : 'debit',
           memo: `Added via agent: "${message}"`,
+          displayAmount: rawAmount,
+          displayCurrency: fromCode,
         },
       }],
     }
@@ -657,7 +696,8 @@ async function routeIntent(message: string, ctx: ToolContext): Promise<{
 export async function runAgent(
   ctx: ToolContext,
   userMessage: string,
-  history: { role: string; content: string }[] = []
+  history: { role: string; content: string }[] = [],
+  options: { skipLlm?: boolean } = {}
 ): Promise<{ response: string; mode: string; toolResults: ToolResult[]; toolCalls: any[] }> {
   // 1. Route intent (Supervisor)
   const { mode, tools } = await routeIntent(userMessage, ctx)
@@ -693,8 +733,8 @@ CORE PRINCIPLES:
 3. Never give licensed financial advice (stock picks, tax filing instructions, insurance purchase recommendations). If asked, say "That's outside my scope — please consult a licensed financial advisor."
 4. Keep responses tight: 2-4 sentences for quick queries, 2-3 short paragraphs for monthly reviews. Use bullet points when listing multiple findings.
 5. When recommending actions, always state the dollar impact, the confidence level, and the underlying evidence.
-6. You are operating in ${ctx.privacyMode ? 'PRIVACY MODE (PII scrubbed locally before any cloud call)' : 'standard mode'}.
-7. User's current permission tier: ${ctx.tier}. Viewer cannot modify; Editor can modify budgets, transactions, goals and recommendations; Approver can execute transfers.
+6. You are operating in ${ctx.privacyMode ? 'PRIVATE MODE: do not send this conversation to a cloud LLM. Answer only from tool results.' : 'standard mode (cloud LLM may rewrite tool results)'}.
+7. User's current permission tier: ${ctx.tier}. Viewer cannot modify data; Editor can modify budgets, transactions, goals, and recommendations.
 
 YOU CAN ADD AND EDIT DATA — not just read it. The user can ask you to:
 - **Add a transaction**: "I spent $50 on coffee at Blue Bottle" or "I received $2000 paycheck" or "Log a $30 expense at Shell"
@@ -718,8 +758,12 @@ You have access to the following tool results from your worker agents. Use them 
 TOOL RESULTS (JSON):
 ${JSON.stringify(toolResults.map(r => ({ tool: r.tool, summary: r.summary, data: r.data })), null, 2)}`
 
-  // 4. Call LLM — supports multiple providers
+  // 4. Call LLM — supports multiple providers. Privacy mode stays on-device.
   let response: string
+  if (options.skipLlm || ctx.privacyMode) {
+    response = buildFallbackResponse(userMessage, mode, toolResults)
+    return { response, mode, toolResults, toolCalls }
+  }
   try {
     // Get user's LLM provider preference from settings
     const user = await db.user.findUnique({
@@ -804,7 +848,7 @@ ${JSON.stringify(toolResults.map(r => ({ tool: r.tool, summary: r.summary, data:
       const completion = await zai.chat.completions.create({
         messages: [
           { role: 'assistant', content: systemPrompt },
-          ...history.slice(-6).map(m => ({ role: m.role, content: m.content })),
+          ...history.slice(-6).map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
           { role: 'user', content: userMessage },
         ],
         thinking: { type: 'disabled' },
@@ -821,6 +865,17 @@ ${JSON.stringify(toolResults.map(r => ({ tool: r.tool, summary: r.summary, data:
 }
 
 function buildFallbackResponse(message: string, mode: string, results: ToolResult[]): string {
+  const LLM_NOTE = '\n\n_Note: no LLM is configured, so this is a structured summary. Add an LLM provider + API key in Settings → AI Agent for full natural-language answers._'
+
+  if (mode === 'write') {
+    const ok = results.filter(r => r.success)
+    const failed = results.filter(r => !r.success)
+    let out = ''
+    if (ok.length > 0) out += `**Done:** ${ok.map(r => r.summary).join('; ')}.`
+    if (failed.length > 0) out += `${out ? '\n\n' : ''}**Could not complete:** ${failed.map(r => r.summary).join('; ')}.`
+    return out || 'I could not complete that request.'
+  }
+
   if (mode === 'monthly_review') {
     const budget = results.find(r => r.tool === 'get_budget')
     const insights = results.find(r => r.tool === 'get_insights')
@@ -837,19 +892,25 @@ function buildFallbackResponse(message: string, mode: string, results: ToolResul
         out += '\n'
       }
     }
-    if (insights?.data?.anomalies?.length > 0) {
-      out += `**Anomalies flagged:** ${insights.data.totalAnomalies}\n`
-      for (const a of insights.data.anomalies.slice(0, 3)) {
+    if ((insights?.data?.anomalies?.length ?? 0) > 0) {
+      out += `**Anomalies flagged:** ${insights!.data.totalAnomalies}\n`
+      for (const a of insights!.data.anomalies.slice(0, 3)) {
         out += `- ${a.merchant}: $${(a.amountCents / 100).toFixed(2)} on ${new Date(a.date).toLocaleDateString()}\n`
       }
       out += '\n'
     }
-    if (recs?.data?.recommendations?.length > 0) {
-      out += `**Top recommendation:** ${recs.data.recommendations[0].title} ($${(recs.data.recommendations[0].impactCents / 100).toFixed(0)}/yr savings)\n\n`
+    if ((recs?.data?.recommendations?.length ?? 0) > 0) {
+      out += `**Top recommendation:** ${recs!.data.recommendations[0].title} ($${(recs!.data.recommendations[0].impactCents / 100).toFixed(0)}/yr savings)\n\n`
     }
     out += '_Note: LLM unavailable, showing structured tool output._'
     return out
   }
-  // Default fallback
-  return results.map(r => `**${r.tool}**: ${r.summary}`).join('\n\n') || 'I could not process your request.'
+
+  // quick_qa / goal_planning fallback — turn tool summaries into a readable answer
+  const lines = results.map(r => {
+    if (!r.success) return `- **${r.tool.replace(/^get_/, '')}** — unavailable: ${r.summary}`
+    return `- ${r.summary}`
+  })
+  if (lines.length === 0) return 'I could not process your request. Try rephrasing, or configure an LLM in Settings.'
+  return `Here's what I found:\n\n${lines.join('\n')}${LLM_NOTE}`
 }

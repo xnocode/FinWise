@@ -4,9 +4,9 @@
 // 3. Behavioral Trigger Detection — mines patterns like "spend 40% more on Fridays"
 // 4. Time-Value Calculator — converts spending to hours worked + 30-yr opportunity cost
 // 5. Goal Collision Detector — multi-goal constraint solver
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getUserEmail } from '@/lib/auth'
+import { requireUser } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -178,7 +178,7 @@ function detectTriggers(transactions: any[]): { triggers: { pattern: string; des
     daySpend[dow].total += t.amountCents
     daySpend[dow].count += 1
   }
-  const dayAvgs = Object.entries(daySpend).map(([d, v]) => ({ day: parseInt(d), avg: v.total / v.count, name: dayNames[parseInt(d)] }))
+  const dayAvgs = Object.entries(daySpend).map(([d, v]) => ({ day: parseInt(d), avg: v.total / v.count, count: v.count, name: dayNames[parseInt(d)] }))
   if (dayAvgs.length > 0) {
     const overallAvg = dayAvgs.reduce((s, x) => s + x.avg, 0) / dayAvgs.length
     const topDay = dayAvgs.reduce((max, x) => x.avg > max.avg ? x : max, dayAvgs[0])
@@ -381,8 +381,9 @@ function detectGoalCollisions(goals: any[], monthlySavingsPool: number): {
 
 // ─── Main GET handler ───────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
-  const user = await db.user.findUnique({ where: { email: getUserEmail(req) } })
-  if (!user) return NextResponse.json({ ok: false, error: 'No user' }, { status: 404 })
+  const auth = await requireUser(req)
+  if (auth.error) return auth.error
+  const user = auth.user
 
   const now = new Date()
   const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1)
@@ -447,7 +448,7 @@ export async function GET(req: NextRequest) {
   })
 
   // ─── 2. Future Self ────────────────────────────────────────────
-  const currentAge = 28  // assumption for demo
+  const currentAge = user.settings?.currentAge && user.settings.currentAge > 0 ? user.settings.currentAge : 30
   const currentSavings = goals.reduce((s, g) => s + g.savedCents, 0)
   const monthlySavings = Math.round(sixMoIncome / 6 - sixMoSpend / 6)
   const monthlySpendAvg = Math.round(sixMoSpend / 6)

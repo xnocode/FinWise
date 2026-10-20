@@ -1,8 +1,8 @@
 // Smart Insights Feed — AI-curated daily insights that surface the most impactful findings
 // Solves: "what should I focus on today?" — surfaces 1-3 actionable insights per day
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getUserEmail } from '@/lib/auth'
+import { requireUser } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,8 +19,9 @@ type Insight = {
 }
 
 export async function GET(req: NextRequest) {
-  const user = await db.user.findUnique({ where: { email: getUserEmail(req) } })
-  if (!user) return NextResponse.json({ ok: false, error: 'No user' }, { status: 404 })
+  const auth = await requireUser(req)
+  if (auth.error) return auth.error
+  const user = auth.user
 
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)

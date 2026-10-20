@@ -1,7 +1,8 @@
 // Transactions endpoint — list, stats, and CSV upload
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getUserEmail } from '@/lib/auth'
+import { requireUser } from '@/lib/auth'
+import { ensureDefaultCategories } from '@/lib/seed'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,8 +11,9 @@ export async function GET(req: NextRequest) {
   const range = url.searchParams.get('range') || '12m'
   const category = url.searchParams.get('category')
 
-  const user = await db.user.findUnique({ where: { email: getUserEmail(req) } })
-  if (!user) return NextResponse.json({ ok: false, error: 'No data. Call POST /api/seed first.' }, { status: 404 })
+  const auth = await requireUser(req)
+  if (auth.error) return auth.error
+  const user = auth.user
 
   const now = new Date()
   const months = range === '6m' ? 6 : range === '3m' ? 3 : range === '1m' ? 1 : 12
@@ -86,10 +88,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'CSV must contain date and amount columns' }, { status: 400 })
     }
 
-    const user = await db.user.findUnique({ where: { email: getUserEmail(req) } })
-    if (!user) return NextResponse.json({ ok: false, error: 'No user. Seed first.' }, { status: 404 })
+    const auth = await requireUser(req)
+    if (auth.error) return auth.error
+    const user = auth.user
 
-    const categories = await db.category.findMany()
+    const categories = await ensureDefaultCategories()
     const catMap = new Map(categories.map(c => [c.name.toLowerCase(), c.id]))
     const defaultCat = categories.find(c => c.name === 'Shopping') || categories[0]
 

@@ -1,37 +1,47 @@
-// Chat endpoint — runs the Maya agent and returns the response
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { runAgent, type ToolContext } from '@/lib/agent'
-import { getUserEmail } from '@/lib/auth'
+import { runAgent, routeIntent, WRITE_TOOL_NAMES, type ToolContext } from '@/lib/agent'
+import { requireUser } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireUser(req)
+    if (auth.error) return auth.error
+    const user = auth.user
+
     const body = await req.json()
-    const { message, history = [], privacyMode = false, tier = 'Editor' } = body
+    const { message, history = [], confirmed = false } = body
     if (!message || typeof message !== 'string') {
       return NextResponse.json({ ok: false, error: 'message required' }, { status: 400 })
     }
 
-    // Get or create the demo user
-    let user = await db.user.findUnique({ where: { email: getUserEmail(req) } })
-    if (!user) {
-      user = await db.user.create({
-        data: { email: getUserEmail(req), name: 'Demo User', tier, privacyMode },
+    const ctx: ToolContext = {
+      userId: user.id,
+      privacyMode: Boolean(user.privacyMode),
+      tier: (user.tier as 'Viewer' | 'Editor' | 'Approver') || 'Editor',
+    }
+
+    const routed = await routeIntent(message, ctx)
+    const pendingWrites = routed.tools.filter((t) => WRITE_TOOL_NAMES.includes(t.name))
+    if (pendingWrites.length > 0 && user.settings?.agentConfirmWrites && !confirmed) {
+      return NextResponse.json({
+        ok: true,
+        needsConfirmation: true,
+        mode: routed.mode,
+        pendingWrites: pendingWrites.map((t) => ({ name: t.name, args: t.args })),
+        response: 'This will change your data. Confirm to continue.',
+        toolCalls: [],
+        dataChanged: false,
       })
     }
 
-    const ctx: ToolContext = {
-      userId: user.id,
-      privacyMode: Boolean(privacyMode),
-      tier: tier as 'Viewer' | 'Editor' | 'Approver',
-    }
+    const result = await runAgent(ctx, message, history, {
+      skipLlm: Boolean(user.privacyMode),
+    })
 
-    const result = await runAgent(ctx, message, history)
-
-    // Persist conversation
     let conv = await db.conversation.findFirst({
       where: { userId: user.id },
       orderBy: { updatedAt: 'desc' },
@@ -53,16 +63,17 @@ export async function POST(req: NextRequest) {
       ],
     })
 
-    // Detect if any write tool was called AND succeeded — flag for client refresh
-    const writeTools = ['add_transaction', 'create_goal', 'update_budget', 'delete_transaction', 'categorize_merchant']
-    const triggeredWrites = result.toolCalls.some((tc: any) => writeTools.includes(tc.name) && tc.success !== false)
+    const triggeredWrites = result.toolCalls.some(
+      (tc: any) => WRITE_TOOL_NAMES.includes(tc.name) && tc.success !== false
+    )
 
     return NextResponse.json({
       ok: true,
       response: result.response,
       mode: result.mode,
       toolCalls: result.toolCalls,
-      dataChanged: triggeredWrites,  // client uses this to refresh dashboards
+      dataChanged: triggeredWrites,
+      privacyMode: user.privacyMode,
     })
   } catch (err: any) {
     console.error('Chat error:', err)

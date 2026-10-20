@@ -1,12 +1,14 @@
 // Settings endpoint — GET current settings, PATCH to update
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getUserEmail } from '@/lib/auth'
+import { requireUser, publicSettings } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
-  const user = await db.user.findUnique({ where: { email: getUserEmail(req) }, include: { settings: true } })
+  const auth = await requireUser(req)
+  if (auth.error) return auth.error
+  const user = auth.user
   if (!user) return NextResponse.json({ ok: false, error: 'No user' }, { status: 404 })
 
   // Create default settings if none exist
@@ -15,14 +17,19 @@ export async function GET(req: NextRequest) {
     settings = await db.userSettings.create({ data: { userId: user.id } })
   }
 
-  return NextResponse.json({ ok: true, settings, user: { email: user.email, name: user.name, tier: user.tier, privacyMode: user.privacyMode } })
+  return NextResponse.json({
+    ok: true,
+    settings: publicSettings(settings),
+    user: { email: user.email, name: user.name, tier: user.tier, privacyMode: user.privacyMode },
+  })
 }
 
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json()
-    const user = await db.user.findUnique({ where: { email: getUserEmail(req) } })
-    if (!user) return NextResponse.json({ ok: false, error: 'No user' }, { status: 404 })
+    const auth = await requireUser(req)
+    if (auth.error) return auth.error
+    const user = auth.user
 
     // Ensure settings record exists
     let settings = await db.userSettings.findUnique({ where: { userId: user.id } })
@@ -40,6 +47,7 @@ export async function PATCH(req: NextRequest) {
       'analyticsReturnRate', 'analyticsInflation', 'analyticsVolatility',
       'shareAggregates',
       'llmProvider', 'llmApiKey', 'llmModel', 'llmBaseUrl',
+      'onboardingState', 'currentAge',
     ]
 
     const updateData: any = {}
@@ -48,10 +56,13 @@ export async function PATCH(req: NextRequest) {
         updateData[key] = body[key]
       }
     }
+    if (typeof updateData.llmApiKey === 'string' && (updateData.llmApiKey.startsWith('•') || updateData.llmApiKey.includes('****'))) {
+      delete updateData.llmApiKey
+    }
 
     // Also update user-level fields (tier, privacyMode, name)
     const userUpdate: any = {}
-    if (body.tier !== undefined) userUpdate.tier = body.tier
+    if (body.tier === 'Viewer' || body.tier === 'Editor') userUpdate.tier = body.tier
     if (body.privacyMode !== undefined) userUpdate.privacyMode = body.privacyMode
     if (body.name !== undefined) userUpdate.name = body.name
 
@@ -63,7 +74,7 @@ export async function PATCH(req: NextRequest) {
       settings = await db.userSettings.update({ where: { userId: user.id }, data: updateData })
     }
 
-    return NextResponse.json({ ok: true, settings })
+    return NextResponse.json({ ok: true, settings: publicSettings(settings) })
   } catch (err: any) {
     console.error('Settings update error:', err)
     return NextResponse.json({ ok: false, error: err.message }, { status: 500 })

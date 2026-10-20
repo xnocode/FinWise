@@ -1,13 +1,14 @@
 // Budget endpoint — get current month + update envelope
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getUserEmail } from '@/lib/auth'
+import { requireUser } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
-  const user = await db.user.findUnique({ where: { email: getUserEmail(req) } })
-  if (!user) return NextResponse.json({ ok: false, error: 'No user' }, { status: 404 })
+  const auth = await requireUser(req)
+  if (auth.error) return auth.error
+  const user = auth.user
 
   const now = new Date()
   const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
@@ -61,8 +62,9 @@ export async function PATCH(req: NextRequest) {
     if (!categoryId || typeof amountCents !== 'number') {
       return NextResponse.json({ ok: false, error: 'categoryId and amountCents required' }, { status: 400 })
     }
-    const user = await db.user.findUnique({ where: { email: getUserEmail(req) } })
-    if (!user) return NextResponse.json({ ok: false, error: 'No user' }, { status: 404 })
+    const auth = await requireUser(req)
+    if (auth.error) return auth.error
+    const user = auth.user
 
     if (user.tier === 'Viewer') {
       return NextResponse.json({ ok: false, error: 'Viewer tier cannot modify budgets' }, { status: 403 })

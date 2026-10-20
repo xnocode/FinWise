@@ -16,12 +16,15 @@ model User {
   name      String?
   tier      String   @default("Viewer") // Viewer | Editor | Approver
   privacyMode Boolean @default(false)
+  passwordHash String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   transactions    Transaction[]
   budgets         Budget[]
   goals           Goal[]
+  debts           Debt[]
+  notifications   Notification[]
   conversations   Conversation[]
   recommendations Recommendation[]
   settings        UserSettings?
@@ -52,7 +55,7 @@ model UserSettings {
   agentResponseStyle   String   @default("professional") // professional | casual | detailed
   agentDefaultMode     String   @default("auto") // auto | quick_qa | monthly_review
   agentAutoRefresh     Boolean  @default(true)
-  agentConfirmWrites   Boolean  @default(false)
+  agentConfirmWrites   Boolean  @default(true)
   // Analytics
   analyticsReturnRate  Float    @default(0.07) // assumed annual investment return
   analyticsInflation   Float    @default(0.025) // assumed inflation rate
@@ -64,6 +67,9 @@ model UserSettings {
   llmApiKey            String   @default("")
   llmModel             String   @default("") // e.g. gpt-4o, claude-3-5-sonnet, llama3.1
   llmBaseUrl           String   @default("") // for custom providers (e.g. http://localhost:11434/v1)
+  // Onboarding
+  onboardingState      String?  // JSON array of completed step IDs
+  currentAge           Int      @default(30)
   // Timestamps
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
@@ -179,3 +185,35 @@ model Recommendation {
 
   @@index([userId, status])
 }
+
+model Debt {
+  id              String   @id @default(cuid())
+  userId          String
+  name            String
+  category        String   @default("Credit Card") // Credit Card | Student Loan | Auto Loan | Personal Loan | Mortgage | Other
+  balanceCents    Int
+  apr             Float    // e.g. 0.1999 for 19.99%
+  minPaymentCents Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      String   // bill | budget | anomaly | rec | system
+  read      Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+}
+

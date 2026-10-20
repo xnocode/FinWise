@@ -1,74 +1,33 @@
-// Debt Payoff Planner — Avalanche vs Snowball strategies
-// Solves: "which debt should I pay off first to minimize interest?"
-import { NextResponse } from 'next/server'
+// Debt Payoff Planner — Real user debts with Avalanche vs Snowball payoff strategies
+// Handles CRUD on debts stored in database + real payoff simulation
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getUserEmail } from '@/lib/auth'
+import { requireUser } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
-type Debt = {
+type DebtItem = {
   id: string
   name: string
   balanceCents: number
   apr: number           // annual percentage rate (0.20 = 20%)
   minPaymentCents: number
-  category?: string
-}
-
-// Generate synthetic debts based on transaction patterns (since the schema doesn't have a debts table)
-async function generateDebtsFromTransactions(userId: string) {
-  // Look for transactions that look like debt payments or recurring credit card payments
-  const txs = await db.transaction.findMany({
-    where: { userId, direction: 'debit' },
-    include: { category: true },
-    orderBy: { date: 'desc' },
-    take: 200,
-  })
-
-  // Create realistic synthetic debts based on observed spending patterns
-  // (In a real app these would come from a Debts table or banking API)
-  const totalSpend = txs.reduce((s, t) => s + t.amountCents, 0)
-  const monthlySpend = totalSpend / 6  // ~6 months of data
-
-  const debts: Debt[] = [
-    {
-      id: 'synth-credit-card-1',
-      name: 'Chase Sapphire Credit Card',
-      balanceCents: Math.round(monthlySpend * 1.8),  // ~1.8 months of spend
-      apr: 0.2299,  // typical credit card APR
-      minPaymentCents: Math.round(monthlySpend * 0.04),
-      category: 'Credit Card',
-    },
-    {
-      id: 'synth-student-loan',
-      name: 'Federal Student Loan',
-      balanceCents: Math.round(monthlySpend * 8),  // typical student loan balance
-      apr: 0.055,   // federal student loan rate
-      minPaymentCents: Math.round(monthlySpend * 0.05),
-      category: 'Student Loan',
-    },
-    {
-      id: 'synth-auto-loan',
-      name: 'Auto Loan',
-      balanceCents: Math.round(monthlySpend * 4),
-      apr: 0.0699,
-      minPaymentCents: Math.round(monthlySpend * 0.06),
-      category: 'Auto Loan',
-    },
-    {
-      id: 'synth-credit-card-2',
-      name: 'Store Credit Card',
-      balanceCents: Math.round(monthlySpend * 0.6),
-      apr: 0.2899,  // store cards have high APR
-      minPaymentCents: Math.round(monthlySpend * 0.03),
-      category: 'Credit Card',
-    },
-  ]
-  return debts.filter(d => d.balanceCents > 0)
+  category: string
 }
 
 // Simulate payoff strategy month by month
-function simulatePayoff(debts: Debt[], extraPaymentCents: number, strategy: 'avalanche' | 'snowball') {
+function simulatePayoff(debts: DebtItem[], extraPaymentCents: number, strategy: 'avalanche' | 'snowball') {
+  if (debts.length === 0) {
+    return {
+      monthsToPayoff: 0,
+      yearsToPayoff: 0,
+      totalInterestPaid: 0,
+      totalPaid: 0,
+      monthlyHistory: [],
+      payoffDate: new Date().toISOString().split('T')[0],
+    }
+  }
+
   let workingDebts = debts.map(d => ({ ...d }))
   const totalMinPayment = workingDebts.reduce((s, d) => s + d.minPaymentCents, 0)
   const totalMonthly = totalMinPayment + extraPaymentCents
@@ -135,35 +94,48 @@ function simulatePayoff(debts: Debt[], extraPaymentCents: number, strategy: 'ava
 }
 
 export async function GET(req: NextRequest) {
-  const user = await db.user.findUnique({ where: { email: getUserEmail(req) } })
-  if (!user) return NextResponse.json({ ok: false, error: 'No user' }, { status: 404 })
+  const auth = await requireUser(req)
+  if (auth.error) return auth.error
+  const user = auth.user
 
-  const debts = await generateDebtsFromTransactions(user.id)
+  // Retrieve user's actual debts from database
+  const debts = await db.debt.findMany({
+    where: { userId: user.id },
+    orderBy: { balanceCents: 'desc' },
+  })
+
   const extraPayment = 20000  // $200/mo extra
-  const avalanche = simulatePayoff(debts, extraPayment, 'avalanche')
-  const snowball = simulatePayoff(debts, extraPayment, 'snowball')
+  const debtItems: DebtItem[] = debts.map(d => ({
+    id: d.id,
+    name: d.name,
+    balanceCents: d.balanceCents,
+    apr: d.apr,
+    minPaymentCents: d.minPaymentCents,
+    category: d.category,
+  }))
 
-  // Comparison
+  const avalanche = simulatePayoff(debtItems, extraPayment, 'avalanche')
+  const snowball = simulatePayoff(debtItems, extraPayment, 'snowball')
+
   const interestSavingsAvalanche = snowball.totalInterestPaid - avalanche.totalInterestPaid
   const recommended = interestSavingsAvalanche > 0 ? 'avalanche' : 'snowball'
 
-  // Per-debt order
-  const avalancheOrder = [...debts].sort((a, b) => b.apr - a.apr).map((d, i) => ({
+  const avalancheOrder = [...debtItems].sort((a, b) => b.apr - a.apr).map((d, i) => ({
     rank: i + 1, name: d.name, balanceCents: d.balanceCents, apr: d.apr, monthlyInterestCents: Math.round(d.balanceCents * d.apr / 12),
   }))
-  const snowballOrder = [...debts].sort((a, b) => a.balanceCents - b.balanceCents).map((d, i) => ({
+  const snowballOrder = [...debtItems].sort((a, b) => a.balanceCents - b.balanceCents).map((d, i) => ({
     rank: i + 1, name: d.name, balanceCents: d.balanceCents, apr: d.apr, monthlyInterestCents: Math.round(d.balanceCents * d.apr / 12),
   }))
 
   return NextResponse.json({
     ok: true,
-    debts: debts.map(d => ({
+    debts: debtItems.map(d => ({
       ...d,
       monthlyInterestCents: Math.round(d.balanceCents * d.apr / 12),
-      payoffMonthsAtMinOnly: Math.ceil(d.balanceCents / d.minPaymentCents),
+      payoffMonthsAtMinOnly: d.minPaymentCents > 0 ? Math.ceil(d.balanceCents / d.minPaymentCents) : 0,
     })),
-    totalDebtCents: debts.reduce((s, d) => s + d.balanceCents, 0),
-    totalMinPaymentCents: debts.reduce((s, d) => s + d.minPaymentCents, 0),
+    totalDebtCents: debtItems.reduce((s, d) => s + d.balanceCents, 0),
+    totalMinPaymentCents: debtItems.reduce((s, d) => s + d.minPaymentCents, 0),
     extraPaymentCents: extraPayment,
     avalanche,
     snowball,
@@ -172,10 +144,93 @@ export async function GET(req: NextRequest) {
       interestSavingsCents: Math.abs(interestSavingsAvalanche),
       timeSavingsMonths: Math.abs(snowball.monthsToPayoff - avalanche.monthsToPayoff),
       reasoning: recommended === 'avalanche'
-        ? 'Avalanche (highest APR first) saves you money on interest — recommended unless you need psychological wins.'
-        : 'Snowball (smallest balance first) provides faster psychological wins — recommended if motivation is a concern.',
+        ? 'Avalanche (highest APR first) saves you more money on interest.'
+        : 'Snowball (smallest balance first) provides faster motivation with quick payoffs.',
     },
     avalancheOrder,
     snowballOrder,
   })
+}
+
+// Add a new debt
+export async function POST(req: NextRequest) {
+  try {
+    const auth = await requireUser(req)
+    if (auth.error) return auth.error
+    const user = auth.user
+
+    const body = await req.json()
+    const { name, category, balanceCents, apr, minPaymentCents } = body
+
+    if (!name || !balanceCents) {
+      return NextResponse.json({ ok: false, error: 'Debt name and balance are required' }, { status: 400 })
+    }
+
+    const debt = await db.debt.create({
+      data: {
+        userId: user.id,
+        name: name.trim(),
+        category: category || 'Credit Card',
+        balanceCents: Math.round(Number(balanceCents)),
+        apr: apr ? Number(apr) : 0.18,
+        minPaymentCents: minPaymentCents ? Math.round(Number(minPaymentCents)) : Math.round(Number(balanceCents) * 0.03),
+      },
+    })
+
+    return NextResponse.json({ ok: true, debt })
+  } catch (err: any) {
+    return NextResponse.json({ ok: false, error: err.message }, { status: 500 })
+  }
+}
+
+// Update an existing debt
+export async function PUT(req: NextRequest) {
+  try {
+    const auth = await requireUser(req)
+    if (auth.error) return auth.error
+    const user = auth.user
+
+    const body = await req.json()
+    const { id, name, category, balanceCents, apr, minPaymentCents } = body
+
+    if (!id) return NextResponse.json({ ok: false, error: 'Debt ID required' }, { status: 400 })
+
+    const existing = await db.debt.findFirst({ where: { id, userId: user.id } })
+    if (!existing) return NextResponse.json({ ok: false, error: 'Debt not found' }, { status: 404 })
+    const updated = await db.debt.update({
+      where: { id },
+      data: {
+        ...(name ? { name: name.trim() } : {}),
+        ...(category ? { category } : {}),
+        ...(balanceCents !== undefined ? { balanceCents: Math.round(Number(balanceCents)) } : {}),
+        ...(apr !== undefined ? { apr: Number(apr) } : {}),
+        ...(minPaymentCents !== undefined ? { minPaymentCents: Math.round(Number(minPaymentCents)) } : {}),
+      },
+    })
+
+    return NextResponse.json({ ok: true, debt: updated })
+  } catch (err: any) {
+    return NextResponse.json({ ok: false, error: err.message }, { status: 500 })
+  }
+}
+
+// Delete a debt
+export async function DELETE(req: NextRequest) {
+  try {
+    const auth = await requireUser(req)
+    if (auth.error) return auth.error
+    const user = auth.user
+
+    const { searchParams } = new URL(req.url)
+    const id = searchParams.get('id')
+    if (!id) return NextResponse.json({ ok: false, error: 'Debt ID required' }, { status: 400 })
+
+    const existing = await db.debt.findFirst({ where: { id, userId: user.id } })
+    if (!existing) return NextResponse.json({ ok: false, error: 'Debt not found' }, { status: 404 })
+    await db.debt.delete({ where: { id } })
+
+    return NextResponse.json({ ok: true, message: 'Debt deleted' })
+  } catch (err: any) {
+    return NextResponse.json({ ok: false, error: err.message }, { status: 500 })
+  }
 }
