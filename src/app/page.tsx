@@ -214,27 +214,28 @@ export default function Home() {
         localStorage.setItem('finwise_user', JSON.stringify(d.user))
         // Set cookie so all API requests automatically include the user's email
         document.cookie = `finwise_email=${d.user.email}; path=/; max-age=${60*60*24*30}; SameSite=Lax`
-        // Use the logged-in user's email for seeding — NOT the demo user
-        const userEmail = d.user.email
-        try {
-          await fetch('/api/seed', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-User-Email': userEmail },
-          })
-        } catch (e) {
-          console.error('Seed failed for new user:', e)
-        }
+
         if (action === 'demo') {
+          // Demo user: seed with sample data
+          setAppState('app')
+          setSeeded(true)
+          handleSeed()
+          toast.success('Welcome to FinWise Demo!')
+        } else if (action === 'signup') {
+          // New user: NO data seeded — starts completely empty
+          // Go straight to the guided tour
+          setAppState('onboarding')
+          setSeeded(true)  // Mark as seeded so dashboard loads (with empty state)
+          toast.success(`Account created! Welcome, ${d.user.name}`)
+        } else {
+          // Login: load existing user's data
           setAppState('app')
           setSeeded(true)
           loadDashboard()
-        } else {
-          setAppState('onboarding')
-          setSeeded(true)
-          loadDashboard()
+          toast.success(`Welcome back, ${d.user.name}!`)
         }
-        toast.success(action === 'demo' ? 'Welcome to FinWise!' : `Account created! Welcome, ${d.user.name}`)
       } else {
+        // Show the error message from the API
         toast.error(d.error || 'Authentication failed')
       }
     } catch (err: any) {
@@ -395,7 +396,14 @@ export default function Home() {
     }
   }
 
-  useEffect(() => { handleSeed() }, [])
+  useEffect(() => {
+    // Only auto-seed for demo users or returning users — NOT for brand new signups
+    // The auth handler controls seeding explicitly
+    if (appState === 'app' && !authUser) {
+      // No auth user — don't seed
+      return
+    }
+  }, [])
   const loadAnalytics = useCallback(async () => {
     setAnalyticsLoading(true)
     try {
@@ -4349,6 +4357,77 @@ function SettingsView({ data, loading, onRefresh, onUpdate, onSeed, tier, setTie
         </div>
       </Card>
 
+      {/* ─── LLM Provider Configuration ──────────────────────── */}
+      <Card className="p-5 border-[var(--fw-accent-border)] bg-gradient-to-br from-[var(--fw-surface)] to-[var(--fw-accent-soft)] shadow-[var(--fw-shadow-sm)] rounded-xl">
+        <div className="flex items-center gap-2 mb-4">
+          <Brain className="h-4 w-4 text-[var(--fw-accent)]" />
+          <h2 className="text-[14px] font-semibold">LLM Provider</h2>
+          <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded bg-[var(--fw-accent-soft)] text-[var(--fw-accent)] border border-[var(--fw-accent-border)] uppercase tracking-wider">Advanced</span>
+        </div>
+        <p className="text-[11px] text-[var(--fw-text-3)] mb-4">Choose which AI model powers the FinWise agent. Default is Z.ai (no API key needed).</p>
+        <div className="space-y-3">
+          <div>
+            <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Provider</label>
+            <Select value={s.llmProvider || 'zai'} onValueChange={(v) => onUpdate({ llmProvider: v })}>
+              <SelectTrigger className="h-9 text-[12px] border-[var(--fw-border)] bg-[var(--fw-surface-2)] rounded-lg">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="zai">Z.ai (Default — no API key needed)</SelectItem>
+                <SelectItem value="openai">OpenAI (GPT-4o, GPT-4, etc.)</SelectItem>
+                <SelectItem value="anthropic">Anthropic (Claude 3.5 Sonnet, etc.)</SelectItem>
+                <SelectItem value="custom">Custom (Ollama, LM Studio, any OpenAI-compatible)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {s.llmProvider && s.llmProvider !== 'zai' && (
+            <>
+              <div>
+                <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">API Key</label>
+                <Input
+                  type="password"
+                  value={s.llmApiKey || ''}
+                  onChange={(e) => onUpdate({ llmApiKey: e.target.value })}
+                  placeholder={s.llmProvider === 'openai' ? 'sk-...' : s.llmProvider === 'anthropic' ? 'sk-ant-...' : 'your-api-key'}
+                  className="h-9 text-[12px] border-[var(--fw-border)] bg-[var(--fw-surface-2)] rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Model {s.llmProvider === 'zai' ? '(auto-selected)' : '(optional — leave empty for default)'}</label>
+                <Input
+                  value={s.llmModel || ''}
+                  onChange={(e) => onUpdate({ llmModel: e.target.value })}
+                  placeholder={s.llmProvider === 'openai' ? 'gpt-4o' : s.llmProvider === 'anthropic' ? 'claude-3-5-sonnet-20241022' : s.llmProvider === 'custom' ? 'llama3.1' : ''}
+                  className="h-9 text-[12px] border-[var(--fw-border)] bg-[var(--fw-surface-2)] rounded-lg"
+                />
+              </div>
+              {s.llmProvider === 'custom' && (
+                <div>
+                  <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Base URL (OpenAI-compatible endpoint)</label>
+                  <Input
+                    value={s.llmBaseUrl || ''}
+                    onChange={(e) => onUpdate({ llmBaseUrl: e.target.value })}
+                    placeholder="http://localhost:11434/v1"
+                    className="h-9 text-[12px] border-[var(--fw-border)] bg-[var(--fw-surface-2)] rounded-lg"
+                  />
+                  <div className="text-[10px] text-[var(--fw-text-3)] mt-1">Works with Ollama, LM Studio, vLLM, LocalAI, or any OpenAI-compatible API</div>
+                </div>
+              )}
+            </>
+          )}
+          {(!s.llmProvider || s.llmProvider === 'zai') && (
+            <div className="p-3 rounded-lg bg-[var(--fw-positive-soft)] border border-[var(--fw-positive-border)]">
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="h-4 w-4 text-[var(--fw-positive)] flex-shrink-0 mt-0.5" />
+                <div className="text-[11px] text-[var(--fw-text-2)] leading-relaxed">
+                  Using <strong>Z.ai</strong> as the LLM provider — no API key required. This is the default and recommended option for the PBCSF competition. You can switch to OpenAI, Anthropic, or a local model (Ollama) at any time.
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </Card>
+
       {/* ─── Analytics Parameters ─────────────────────────────── */}
       <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl">
         <div className="flex items-center gap-2 mb-4">
@@ -4668,7 +4747,7 @@ function LandingPage({ onGetStarted, onDemo }: { onGetStarted: () => void; onDem
   )
 }
 
-// ═══ Auth Page ════════════════════════════════════════════════════════
+// ═══ Auth Page (Professional) ═════════════════════════════════════════
 function AuthPage({ mode, setMode, onAuth, loading, onBack, onDemo }: {
   mode: 'login' | 'signup'
   setMode: (m: 'login' | 'signup') => void
@@ -4680,24 +4759,39 @@ function AuthPage({ mode, setMode, onAuth, loading, onBack, onDemo }: {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [showPassword, setShowPassword] = useState(false)
+
+  const validate = (): boolean => {
+    const errs: Record<string, string> = {}
+    if (mode === 'signup' && !name.trim()) errs.name = 'Full name is required'
+    if (!email.trim()) errs.email = 'Email is required'
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.email = 'Enter a valid email address'
+    if (!password) errs.password = 'Password is required'
+    else if (password.length < 6) errs.password = 'Password must be at least 6 characters'
+    setErrors(errs)
+    return Object.keys(errs).length === 0
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (!validate()) return
+    setErrors({})
     onAuth(mode, email, password, mode === 'signup' ? name : undefined)
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--fw-bg)] p-4">
-      <div className="w-full max-w-[420px]">
-        {/* Back button */}
-        <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-[var(--fw-text-3)] hover:text-[var(--fw-text)] mb-6 transition-colors">
-          <ArrowRight className="h-3.5 w-3.5 rotate-180" /> Back to home
-        </button>
-
-        <div className="p-8 rounded-2xl border border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-lg)]">
-          {/* Logo */}
-          <div className="flex items-center gap-2.5 mb-6 justify-center">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[var(--fw-accent)] to-[var(--fw-accent-hover)] flex items-center justify-center shadow-[var(--fw-shadow-glow)]">
+    <div className="min-h-screen flex bg-[var(--fw-bg)]">
+      {/* Left side — branding panel */}
+      <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 bg-gradient-to-br from-[var(--fw-accent)] via-[var(--fw-accent-hover)] to-[#4338ca] text-white relative overflow-hidden">
+        {/* Decorative grid */}
+        <div className="absolute inset-0 opacity-10" style={{
+          backgroundImage: 'linear-gradient(rgba(255,255,255,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.3) 1px, transparent 1px)',
+          backgroundSize: '40px 40px',
+        }} />
+        <div className="relative z-10">
+          <div className="flex items-center gap-2.5 mb-12">
+            <div className="h-10 w-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="text-white">
                 <path d="M3 3v18h18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
                 <path d="M7 14l3-4 3 3 5-7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -4705,40 +4799,110 @@ function AuthPage({ mode, setMode, onAuth, loading, onBack, onDemo }: {
             </div>
             <span className="text-[20px] font-semibold tracking-tight">FinWise</span>
           </div>
+          <h1 className="text-[36px] font-bold leading-tight mb-4">
+            {mode === 'signup' ? 'Start your journey to\nfinancial intelligence' : 'Welcome back to\nyour financial copilot'}
+          </h1>
+          <p className="text-[14px] text-white/80 max-w-[400px] leading-relaxed mb-8">
+            {mode === 'signup'
+              ? 'Join FinWise to get an AI agent that adds transactions via natural language, runs Monte Carlo simulations, and surfaces personalized insights tailored to your spending patterns.'
+              : 'Sign in to continue your financial journey with AI-powered insights, budgeting, and forecasting across 166 world currencies.'}
+          </p>
+          <div className="space-y-3">
+            {[
+              { icon: Bot, text: 'AI Agent — add transactions, create goals, update budgets via chat' },
+              { icon: Brain, text: 'Financial Health Score — composite metric across 5 weighted factors' },
+              { icon: Dna, text: 'Personality DNA — discover your financial archetype' },
+              { icon: Globe, text: '166 world currencies with live exchange rate conversion' },
+            ].map((f, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-lg bg-white/15 flex items-center justify-center flex-shrink-0">
+                  <f.icon className="h-4 w-4 text-white" />
+                </div>
+                <span className="text-[12px] text-white/90">{f.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="relative z-10 text-[11px] text-white/60">
+          PBCSF International Track · Topic A · Built with Next.js 16 & Z.ai LLM
+        </div>
+      </div>
 
-          <h2 className="text-[20px] font-semibold text-center mb-1">
-            {mode === 'signup' ? 'Create your account' : 'Welcome back'}
+      {/* Right side — form panel */}
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-12">
+        <div className="w-full max-w-[400px]">
+          {/* Mobile logo */}
+          <div className="lg:hidden flex items-center gap-2.5 mb-8 justify-center">
+            <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-[var(--fw-accent)] to-[var(--fw-accent-hover)] flex items-center justify-center">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-white">
+                <path d="M3 3v18h18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+                <path d="M7 14l3-4 3 3 5-7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <span className="text-[18px] font-semibold tracking-tight">FinWise</span>
+          </div>
+
+          <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-[var(--fw-text-3)] hover:text-[var(--fw-text)] mb-8 transition-colors">
+            <ArrowRight className="h-3.5 w-3.5 rotate-180" /> Back to home
+          </button>
+
+          <h2 className="text-[24px] font-bold mb-1">
+            {mode === 'signup' ? 'Create your account' : 'Sign in'}
           </h2>
-          <p className="text-[12px] text-[var(--fw-text-3)] text-center mb-6">
-            {mode === 'signup' ? 'Start your journey to financial intelligence' : 'Sign in to your FinWise account'}
+          <p className="text-[13px] text-[var(--fw-text-3)] mb-8">
+            {mode === 'signup' ? 'Start with a fresh account — no demo data, just your real finances.' : 'Welcome back. Enter your credentials to continue.'}
           </p>
 
-          <form onSubmit={handleSubmit} className="space-y-3">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {mode === 'signup' && (
               <div>
                 <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Full Name</label>
                 <div className="relative">
                   <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--fw-text-3)]" />
-                  <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="John Doe" required className="h-10 pl-10 text-[13px] border-[var(--fw-border)] bg-[var(--fw-surface-2)] rounded-lg" />
+                  <Input
+                    value={name}
+                    onChange={(e) => { setName(e.target.value); if (errors.name) setErrors({ ...errors, name: '' }) }}
+                    placeholder="John Doe"
+                    className={`h-11 pl-10 text-[13px] bg-[var(--fw-surface-2)] rounded-lg ${errors.name ? 'border-red-400' : 'border-[var(--fw-border)]'}`}
+                  />
                 </div>
+                {errors.name && <p className="text-[11px] text-red-500 mt-1">{errors.name}</p>}
               </div>
             )}
             <div>
-              <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Email</label>
+              <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Email Address</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--fw-text-3)]" />
-                <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="you@example.com" required className="h-10 pl-10 text-[13px] border-[var(--fw-border)] bg-[var(--fw-surface-2)] rounded-lg" />
+                <Input
+                  value={email}
+                  onChange={(e) => { setEmail(e.target.value); if (errors.email) setErrors({ ...errors, email: '' }) }}
+                  type="email"
+                  placeholder="you@example.com"
+                  className={`h-11 pl-10 text-[13px] bg-[var(--fw-surface-2)] rounded-lg ${errors.email ? 'border-red-400' : 'border-[var(--fw-border)]'}`}
+                />
               </div>
+              {errors.email && <p className="text-[11px] text-red-500 mt-1">{errors.email}</p>}
             </div>
             <div>
               <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Password</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--fw-text-3)]" />
-                <Input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="••••••••" required className="h-10 pl-10 text-[13px] border-[var(--fw-border)] bg-[var(--fw-surface-2)] rounded-lg" />
+                <Input
+                  value={password}
+                  onChange={(e) => { setPassword(e.target.value); if (errors.password) setErrors({ ...errors, password: '' }) }}
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  className={`h-11 pl-10 pr-10 text-[13px] bg-[var(--fw-surface-2)] rounded-lg ${errors.password ? 'border-red-400' : 'border-[var(--fw-border)]'}`}
+                />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--fw-text-3)] hover:text-[var(--fw-text)]">
+                  {showPassword ? <Lock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                </button>
               </div>
+              {errors.password && <p className="text-[11px] text-red-500 mt-1">{errors.password}</p>}
+              {mode === 'signup' && <p className="text-[10px] text-[var(--fw-text-3)] mt-1.5">Must be at least 6 characters</p>}
             </div>
 
-            <Button type="submit" disabled={loading} className="w-full h-10 mt-4 bg-gradient-to-r from-[var(--fw-accent)] to-[var(--fw-accent-hover)] text-white rounded-lg text-[13px] font-semibold shadow-[var(--fw-shadow-glow)]">
+            <Button type="submit" disabled={loading} className="w-full h-11 mt-2 bg-gradient-to-r from-[var(--fw-accent)] to-[var(--fw-accent-hover)] text-white rounded-lg text-[13px] font-semibold shadow-[var(--fw-shadow-glow)]">
               {loading ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : (mode === 'signup' ? 'Create Account' : 'Sign In')}
             </Button>
           </form>
@@ -4751,15 +4915,15 @@ function AuthPage({ mode, setMode, onAuth, loading, onBack, onDemo }: {
           </div>
 
           {/* Demo button */}
-          <Button onClick={onDemo} variant="outline" className="w-full h-10 border-[var(--fw-border)] text-[13px] font-medium rounded-lg">
-            <Zap className="h-4 w-4 mr-1.5 text-[var(--fw-accent)]" /> Try Demo (No Account Needed)
+          <Button onClick={onDemo} variant="outline" className="w-full h-11 border-[var(--fw-border)] text-[13px] font-medium rounded-lg">
+            <Zap className="h-4 w-4 mr-1.5 text-[var(--fw-accent)]" /> Try Demo (with sample data)
           </Button>
 
           {/* Switch mode */}
-          <div className="text-center mt-5 text-[12px] text-[var(--fw-text-3)]">
+          <div className="text-center mt-6 text-[12px] text-[var(--fw-text-3)]">
             {mode === 'signup' ? 'Already have an account? ' : "Don't have an account? "}
-            <button onClick={() => setMode(mode === 'signup' ? 'login' : 'signup')} className="text-[var(--fw-accent)] font-medium hover:underline">
-              {mode === 'signup' ? 'Sign in' : 'Sign up'}
+            <button onClick={() => { setMode(mode === 'signup' ? 'login' : 'signup'); setErrors({}) }} className="text-[var(--fw-accent)] font-medium hover:underline">
+              {mode === 'signup' ? 'Sign in' : 'Sign up free'}
             </button>
           </div>
         </div>
@@ -4768,7 +4932,7 @@ function AuthPage({ mode, setMode, onAuth, loading, onBack, onDemo }: {
   )
 }
 
-// ═══ Onboarding Page ══════════════════════════════════════════════════
+// ═══ Onboarding Page (Professional Guided Tour) ═══════════════════════
 function OnboardingPage({ userName, tasks, completedTasks, onComplete, onSkip }: {
   userName: string
   tasks: any[]
@@ -4776,55 +4940,146 @@ function OnboardingPage({ userName, tasks, completedTasks, onComplete, onSkip }:
   onComplete: () => void
   onSkip: () => void
 }) {
+  const [currentStep, setCurrentStep] = useState(0)
+
+  const tourSteps = [
+    {
+      title: `Welcome to FinWise, ${userName}!`,
+      icon: Sparkles2,
+      description: 'Your account is ready with a fresh start — no demo data. Let\'s take a quick tour to learn how FinWise works.',
+      highlights: ['AI Agent that understands natural language', '20+ advanced financial features', '166 world currencies with live conversion', '5 novel innovation features you won\'t find anywhere else'],
+    },
+    {
+      title: 'Step 1: Your Overview Dashboard',
+      icon: LayoutGrid,
+      description: 'The Overview page is your financial command center. It shows your income, spending, and net savings at a glance, plus a spending treemap and monthly trend chart.',
+      highlights: ['KPI cards show 6-month income, spend, and net savings', 'Spending treemap visualizes category distribution', 'Monthly trend chart tracks income vs spend over time', 'Budget status shows which categories are over/under budget'],
+    },
+    {
+      title: 'Step 2: Chat with the AI Agent',
+      icon: Bot,
+      description: 'The chat panel on the right is your AI copilot. Ask it anything in natural language — it can read your data AND modify it.',
+      highlights: ['Ask "How did this month go?" for a monthly review', 'Say "I spent $25 on coffee at Blue Bottle" to add a transaction', 'Say "Create a goal to save $5000 for a car" to create a goal', 'Say "Set my dining budget to $400" to update budgets'],
+    },
+    {
+      title: 'Step 3: Add Your First Transaction',
+      icon: Receipt,
+      description: 'Start building your financial picture by adding transactions through the agent. Just type what you spent — the agent extracts the amount, merchant, and category automatically.',
+      highlights: ['Type: "I spent $42 on groceries at Trader Joe\'s"', 'The agent infers the category from keywords ("groceries" → Groceries)', 'Income: "I received $2000 paycheck" creates a credit transaction', 'All changes auto-refresh the dashboard instantly'],
+    },
+    {
+      title: 'Step 4: Explore Budgets & Goals',
+      icon: Wallet,
+      description: 'Set monthly budgets for each category and create savings goals. Run Monte Carlo simulations to project when you\'ll reach your targets.',
+      highlights: ['Budgets: Set envelopes per category, track spend vs allocation', 'Goals: Create targets with monthly contributions', 'Monte Carlo: 1000-trial simulation with confidence intervals', 'Sensitivity analysis shows how small changes accelerate goals'],
+    },
+    {
+      title: 'Step 5: Advanced Analytics & Innovation',
+      icon: BrainIcon,
+      description: 'FinWise includes features no other finance app has. Explore the Analytics and Innovation Lab views for deep insights.',
+      highlights: ['Financial Health Score: composite 0-100 metric across 5 factors', 'Cash Flow Forecast: 14-day Holt-Winters prediction with confidence bounds', 'Personality DNA: discover your financial archetype (Architect, Free Spirit, etc.)', 'Future Self Simulator: project your net worth at age 30, 40, 50, 65'],
+    },
+    {
+      title: 'Step 6: Settings & Customization',
+      icon: Settings,
+      description: 'Customize FinWise to your needs. Change currency (166 options with live rates), toggle dark mode, configure the agent, and more.',
+      highlights: ['166 world currencies with live exchange rate conversion', 'Dark/light theme toggle', 'Agent response style: professional, casual, or detailed', 'Analytics parameters: adjust return rate, inflation, volatility', '3-tier permission system: Viewer, Editor, Approver'],
+    },
+    {
+      title: 'You\'re all set! 🎉',
+      icon: CheckCircle,
+      description: 'You now know how to use FinWise. Start by adding a few transactions via the agent chat, then explore the Analytics and Innovation Lab views. Your financial journey starts now.',
+      highlights: ['Add transactions by chatting with the agent', 'Set up budgets and savings goals', 'Check your Financial Health Score', 'Discover your Financial Personality DNA'],
+    },
+  ]
+
+  const step = tourSteps[currentStep]
+  const isLastStep = currentStep === tourSteps.length - 1
+  const progress = Math.round(((currentStep + 1) / tourSteps.length) * 100)
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--fw-bg)] p-4">
-      <div className="w-full max-w-[600px]">
-        <div className="p-8 rounded-2xl border border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-lg)]">
-          {/* Welcome header */}
-          <div className="text-center mb-6">
-            <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-[var(--fw-accent)] to-[var(--fw-accent-hover)] flex items-center justify-center shadow-[var(--fw-shadow-glow)] mx-auto mb-4">
-              <Sparkles2 className="h-8 w-8 text-white" />
-            </div>
-            <h2 className="text-[24px] font-bold mb-1">Welcome to FinWise, {userName}!</h2>
-            <p className="text-[13px] text-[var(--fw-text-3)]">Let's get you set up. Complete these 7 tasks to learn how to use FinWise.</p>
+      <div className="w-full max-w-[560px]">
+        <div className="rounded-2xl border border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-lg)] overflow-hidden">
+          {/* Progress bar */}
+          <div className="h-1 bg-[var(--fw-surface-2)]">
+            <div className="h-full bg-gradient-to-r from-[var(--fw-accent)] to-[var(--fw-accent-hover)] transition-all duration-300" style={{ width: `${progress}%` }} />
           </div>
 
-          {/* Task list */}
-          <div className="space-y-2 mb-6">
-            {tasks.map((task, i) => (
-              <div key={task.id} className="flex items-start gap-3 p-3 rounded-xl border border-[var(--fw-border)] bg-[var(--fw-surface-2)]">
-                <div className="h-7 w-7 rounded-full bg-gradient-to-br from-[var(--fw-accent)] to-[var(--fw-accent-hover)] flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0">
-                  {i + 1}
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <task.icon className="h-3.5 w-3.5 text-[var(--fw-accent)]" />
-                    <span className="text-[13px] font-medium">{task.label}</span>
-                  </div>
-                  <div className="text-[11px] text-[var(--fw-text-3)]">{task.desc}</div>
-                </div>
+          <div className="p-8">
+            {/* Step indicator */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold">
+                  Tour Step {currentStep + 1} of {tourSteps.length}
+                </span>
               </div>
-            ))}
-          </div>
+              <button onClick={onSkip} className="text-[11px] text-[var(--fw-text-3)] hover:text-[var(--fw-text)] transition-colors">
+                Skip tour
+              </button>
+            </div>
 
-          {/* Info banner */}
-          <div className="p-3 rounded-xl bg-[var(--fw-accent-soft)] border border-[var(--fw-accent-border)] mb-6">
-            <div className="flex items-start gap-2">
-              <Info className="h-4 w-4 text-[var(--fw-accent)] flex-shrink-0 mt-0.5" />
-              <div className="text-[11px] text-[var(--fw-text-2)] leading-relaxed">
-                We've pre-loaded your account with 12 months of sample transactions, 3 savings goals, and 5 recommendations so you can explore everything immediately. You can reset this data anytime from Settings.
-              </div>
+            {/* Icon */}
+            <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-[var(--fw-accent)] to-[var(--fw-accent-hover)] flex items-center justify-center shadow-[var(--fw-shadow-glow)] mb-5">
+              <step.icon className="h-8 w-8 text-white" />
+            </div>
+
+            {/* Title */}
+            <h2 className="text-[22px] font-bold mb-3 leading-tight">{step.title}</h2>
+
+            {/* Description */}
+            <p className="text-[13px] text-[var(--fw-text-2)] leading-relaxed mb-5">{step.description}</p>
+
+            {/* Highlights */}
+            <div className="space-y-2 mb-8">
+              {step.highlights.map((h, i) => (
+                <div key={i} className="flex items-start gap-2.5 p-2.5 rounded-lg bg-[var(--fw-surface-2)] border border-[var(--fw-border)]">
+                  <CheckCircle className="h-4 w-4 text-[var(--fw-positive)] flex-shrink-0 mt-0.5" />
+                  <span className="text-[12px] text-[var(--fw-text-2)] leading-relaxed">{h}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Navigation buttons */}
+            <div className="flex items-center justify-between gap-3">
+              {currentStep > 0 ? (
+                <Button variant="outline" onClick={() => setCurrentStep(currentStep - 1)} className="h-10 px-4 border-[var(--fw-border)] text-[13px] font-medium rounded-lg">
+                  <ArrowRight className="h-3.5 w-3.5 rotate-180 mr-1.5" /> Back
+                </Button>
+              ) : (
+                <div />
+              )}
+              {isLastStep ? (
+                <Button onClick={onComplete} className="h-10 px-6 bg-gradient-to-r from-[var(--fw-accent)] to-[var(--fw-accent-hover)] text-white rounded-lg text-[13px] font-semibold shadow-[var(--fw-shadow-glow)]">
+                  Start Using FinWise <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                </Button>
+              ) : (
+                <Button onClick={() => setCurrentStep(currentStep + 1)} className="h-10 px-6 bg-gradient-to-r from-[var(--fw-accent)] to-[var(--fw-accent-hover)] text-white rounded-lg text-[13px] font-semibold shadow-[var(--fw-shadow-glow)]">
+                  Next <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                </Button>
+              )}
+            </div>
+
+            {/* Dot indicators */}
+            <div className="flex items-center justify-center gap-1.5 mt-6">
+              {tourSteps.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setCurrentStep(i)}
+                  className={`h-1.5 rounded-full transition-all ${i === currentStep ? 'w-6 bg-[var(--fw-accent)]' : 'w-1.5 bg-[var(--fw-border-strong)] hover:bg-[var(--fw-text-3)]'}`}
+                />
+              ))}
             </div>
           </div>
+        </div>
 
-          {/* Actions */}
-          <div className="flex gap-3">
-            <Button onClick={onSkip} variant="outline" className="flex-1 h-10 border-[var(--fw-border)] text-[13px] font-medium rounded-lg">
-              Skip for now
-            </Button>
-            <Button onClick={onComplete} className="flex-1 h-10 bg-gradient-to-r from-[var(--fw-accent)] to-[var(--fw-accent-hover)] text-white rounded-lg text-[13px] font-semibold shadow-[var(--fw-shadow-glow)]">
-              Start Exploring <ArrowRight className="h-4 w-4 ml-1.5" />
-            </Button>
+        {/* Info banner below */}
+        <div className="mt-4 p-3 rounded-xl bg-[var(--fw-accent-soft)] border border-[var(--fw-accent-border)]">
+          <div className="flex items-start gap-2">
+            <Info className="h-4 w-4 text-[var(--fw-accent)] flex-shrink-0 mt-0.5" />
+            <div className="text-[11px] text-[var(--fw-text-2)] leading-relaxed">
+              Your account starts completely empty — no demo data. Add your first transaction by typing something like "I spent $25 on coffee at Blue Bottle" in the agent chat after the tour.
+            </div>
           </div>
         </div>
       </div>

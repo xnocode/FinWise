@@ -39,6 +39,7 @@ export async function PATCH(req: NextRequest) {
       'agentResponseStyle', 'agentDefaultMode', 'agentAutoRefresh', 'agentConfirmWrites',
       'analyticsReturnRate', 'analyticsInflation', 'analyticsVolatility',
       'shareAggregates',
+      'llmProvider', 'llmApiKey', 'llmModel', 'llmBaseUrl',
     ]
 
     const updateData: any = {}

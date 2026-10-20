@@ -696,20 +696,99 @@ You have access to the following tool results from your worker agents. Use them 
 TOOL RESULTS (JSON):
 ${JSON.stringify(toolResults.map(r => ({ tool: r.tool, summary: r.summary, data: r.data })), null, 2)}`
 
-  // 4. Call LLM
+  // 4. Call LLM — supports multiple providers
   let response: string
   try {
-    const ZAI = (await import('z-ai-web-dev-sdk')).default
-    const zai = await ZAI.create()
-    const completion = await zai.chat.completions.create({
-      messages: [
-        { role: 'assistant', content: systemPrompt },
-        ...history.slice(-6).map(m => ({ role: m.role, content: m.content })),
-        { role: 'user', content: userMessage },
-      ],
-      thinking: { type: 'disabled' },
+    // Get user's LLM provider preference from settings
+    const user = await db.user.findUnique({
+      where: { id: ctx.userId },
+      include: { settings: true },
     })
-    response = completion.choices[0]?.message?.content || 'I apologize, I could not process your request. Please try again.'
+    const llmProvider = (user?.settings as any)?.llmProvider || 'zai'
+    const llmApiKey = (user?.settings as any)?.llmApiKey || ''
+    const llmModel = (user?.settings as any)?.llmModel || ''
+
+    if (llmProvider === 'openai' && llmApiKey) {
+      // ─── OpenAI compatible API ────────────────────────────────
+      const model = llmModel || 'gpt-4o'
+      const apiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${llmApiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...history.slice(-6).map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+            { role: 'user', content: userMessage },
+          ],
+          temperature: 0.7,
+          max_tokens: 1000,
+        }),
+      })
+      const apiData = await apiRes.json()
+      response = apiData.choices?.[0]?.message?.content || 'I apologize, I could not process your request. Please try again.'
+    } else if (llmProvider === 'anthropic' && llmApiKey) {
+      // ─── Anthropic Claude API ─────────────────────────────────
+      const model = llmModel || 'claude-3-5-sonnet-20241022'
+      const apiRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': llmApiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model,
+          system: systemPrompt,
+          max_tokens: 1000,
+          messages: [
+            ...history.slice(-6).map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+            { role: 'user', content: userMessage },
+          ],
+        }),
+      })
+      const apiData = await apiRes.json()
+      response = apiData.content?.[0]?.text || 'I apologize, I could not process your request. Please try again.'
+    } else if (llmProvider === 'custom' && llmApiKey) {
+      // ─── Custom OpenAI-compatible endpoint ────────────────────
+      const baseUrl = (user?.settings as any)?.llmBaseUrl || 'http://localhost:11434/v1'
+      const model = llmModel || 'llama3.1'
+      const apiRes = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${llmApiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...history.slice(-6).map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+            { role: 'user', content: userMessage },
+          ],
+          temperature: 0.7,
+          max_tokens: 1000,
+        }),
+      })
+      const apiData = await apiRes.json()
+      response = apiData.choices?.[0]?.message?.content || 'I apologize, I could not process your request. Please try again.'
+    } else {
+      // ─── Default: Z.ai SDK ────────────────────────────────────
+      const ZAI = (await import('z-ai-web-dev-sdk')).default
+      const zai = await ZAI.create()
+      const completion = await zai.chat.completions.create({
+        messages: [
+          { role: 'assistant', content: systemPrompt },
+          ...history.slice(-6).map(m => ({ role: m.role, content: m.content })),
+          { role: 'user', content: userMessage },
+        ],
+        thinking: { type: 'disabled' },
+      })
+      response = completion.choices[0]?.message?.content || 'I apologize, I could not process your request. Please try again.'
+    }
   } catch (err: any) {
     console.error('LLM call failed:', err.message)
     // Fallback response using tool summaries

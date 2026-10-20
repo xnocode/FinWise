@@ -59,6 +59,11 @@ model UserSettings {
   analyticsVolatility  Float    @default(0.15) // Monte Carlo volatility
   // Privacy
   shareAggregates      Boolean  @default(true) // share anonymized data for peer benchmarking
+  // LLM Provider
+  llmProvider          String   @default("zai") // zai | openai | anthropic | custom
+  llmApiKey            String   @default("")
+  llmModel             String   @default("") // e.g. gpt-4o, claude-3-5-sonnet, llama3.1
+  llmBaseUrl           String   @default("") // for custom providers (e.g. http://localhost:11434/v1)
   // Timestamps
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
