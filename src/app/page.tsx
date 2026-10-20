@@ -23,7 +23,7 @@ import {
   Sliders, Trash2, Palette, User as UserIcon, Shield as ShieldIcon,
   LogOut, CheckCircle, Circle, ArrowRight, Mail, UserPlus,
   Sparkles as Sparkles2, TrendingUp as TrendingUpIcon,
-  LayoutGrid, BarChart as BarChartIcon, Brain as BrainIcon,
+  LayoutGrid, BarChart as BarChartIcon, PieChart, Brain as BrainIcon,
   Rocket as RocketIcon, HelpCircle, XCircle,
 } from 'lucide-react'
 import { fmt, fmtMonth, fmtCurrency, setGlobalCurrency, type CurrencyConfig } from '@/lib/format'
@@ -36,7 +36,7 @@ import {
 import { toast } from 'sonner'
 
 type Tier = 'Viewer' | 'Editor' | 'Approver'
-type View = 'overview' | 'transactions' | 'budgets' | 'goals' | 'insights' | 'analytics' | 'planning' | 'innovation' | 'settings'
+type View = 'overview' | 'transactions' | 'budgets' | 'goals' | 'insights' | 'analytics' | 'analysis' | 'planning' | 'innovation' | 'settings'
 type AppState = 'landing' | 'auth' | 'onboarding' | 'app'
 
 type ChatMessage = {
@@ -307,6 +307,7 @@ export default function Home() {
       budgets: 'view_budgets',
       goals: '',
       analytics: 'explore_analytics',
+      analysis: 'explore_analysis',
       innovation: 'visit_innovation',
       transactions: '',
       insights: '',
@@ -619,6 +620,7 @@ export default function Home() {
     { id: 'goals', label: 'Goals', icon: PiggyBank },
     { id: 'planning', label: 'Planning', icon: Rocket },
     { id: 'insights', label: 'Insights', icon: Lightbulb, badge: anomalies.length > 0 ? String(anomalies.length) : undefined },
+    { id: 'analysis', label: 'Analysis', icon: PieChart },
     { id: 'analytics', label: 'Analytics', icon: Brain },
     { id: 'innovation', label: 'Innovation Lab', icon: Dna },
     { id: 'settings', label: 'Settings', icon: Settings },
@@ -662,8 +664,8 @@ export default function Home() {
             <div className="flex items-center gap-2.5">
               <div className="relative h-8 w-8 rounded-[10px] bg-gradient-to-br from-[var(--fw-accent)] to-[var(--fw-accent-hover)] flex items-center justify-center shadow-[var(--fw-shadow-glow)]">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-white">
-                  <path d="M3 3v18h18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
-                  <path d="M7 14l3-4 3 3 5-7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M11 12h4l-2 4h-2zM14 20l2-4 2 4" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/>
+                  <circle cx="12" cy="8" r="1.6" fill="currentColor"/>
                 </svg>
               </div>
               <div className="flex flex-col leading-none">
@@ -980,7 +982,14 @@ export default function Home() {
               fileInputRef={fileInputRef}
             />
           )}
-          {view === 'transactions' && <TransactionsView txns={txns} byCategory={byCategory} />}
+          {view === 'transactions' && <TransactionsView txns={txns} byCategory={byCategory} onRefresh={loadDashboard} />}
+          {view === 'analysis' && <AnalysisView
+            txns={txns}
+            byCategory={byCategory}
+            byMonth={byMonth}
+            totalSpend={totalSpend}
+            totalIncome={totalIncome}
+/>}
           {view === 'budgets' && <BudgetsView budgets={budgets} tier={tier} onUpdate={loadDashboard} />}
           {view === 'goals' && <GoalsView goals={goals} onSimulationComplete={() => completeTask('run_simulation')} />}
           {view === 'insights' && (
@@ -1327,12 +1336,19 @@ function OverviewView(props: {
 }
 
 // ═══ View: Transactions ═══════════════════════════════════════════════
-function TransactionsView({ txns, byCategory }: {
+function TransactionsView({ txns, byCategory, onRefresh }: {
   txns: Txn[]
   byCategory: { name: string; color: string; cents: number; count: number }[]
+  onRefresh: () => void
 }) {
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
+  const [addOpen, setAddOpen] = useState(false)
+  const [addType, setAddType] = useState<'debit' | 'credit'>('debit')
+  const [addAmount, setAddAmount] = useState('')
+  const [addMerchant, setAddMerchant] = useState('')
+  const [addCategory, setAddCategory] = useState<string>('')
+  const [addDate, setAddDate] = useState(new Date().toISOString().slice(0, 10))
 
   const filtered = txns.filter(t => {
     if (categoryFilter !== 'all' && t.category.name !== categoryFilter) return false
@@ -1343,6 +1359,52 @@ function TransactionsView({ txns, byCategory }: {
   const totalSpend = filtered.filter(t => t.direction === 'debit').reduce((s, t) => s + t.amountCents, 0)
   const totalIncome = filtered.filter(t => t.direction === 'credit').reduce((s, t) => s + t.amountCents, 0)
 
+  const handleAddTransaction = async () => {
+    const amount = parseFloat(addAmount)
+    const amountCents = Math.round(amount * 100)
+    if (!addMerchant.trim() || !addCategory.trim() || isNaN(amount) || amountCents <= 0) {
+      toast.error('Please enter a valid amount, merchant and category')
+      return
+    }
+    try {
+      const res = await fetch('/api/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          merchantRaw: addMerchant.trim(),
+          amountCents,
+          direction: addType,
+          category: addCategory.trim(),
+          date: addDate,
+        }),
+      })
+      const json = await res.json()
+      if (!json.ok) throw new Error(json.error || 'Failed to add transaction')
+      setAddOpen(false)
+      setAddAmount('')
+      setAddMerchant('')
+      setAddCategory('')
+      setAddDate(new Date().toISOString().slice(0, 10))
+      toast.success('Transaction added')
+      onRefresh()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to add transaction')
+    }
+  }
+
+  const handleDeleteTransaction = async (id: string) => {
+    if (!window.confirm('Remove this transaction?')) return
+    try {
+      const res = await fetch(`/api/transactions/${id}`, { method: 'DELETE' })
+      const json = await res.json()
+      if (!json.ok) throw new Error(json.error || 'Failed to delete transaction')
+      toast.success('Transaction removed')
+      onRefresh()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to remove transaction')
+    }
+  }
+
   return (
     <div className="p-6 sm:p-8 lg:p-10 space-y-6 max-w-[1200px]">
       <div>
@@ -1350,6 +1412,12 @@ function TransactionsView({ txns, byCategory }: {
         <p className="text-[13px] text-[var(--fw-text-3)] mt-1">
           <span className="text-[var(--fw-text-2)] font-medium">{filtered.length}</span> of {txns.length} · <span className="text-[var(--fw-text-2)] font-medium">{fmt(totalSpend)}</span> spend · <span className="text-[var(--fw-text-2)] font-medium">{fmt(totalIncome)}</span> income
         </p>
+      </div>
+
+      <div className="flex items-end gap-2">
+        <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
+          <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Expense / Income
+        </Button>
       </div>
 
       {/* Filter bar */}
@@ -1395,6 +1463,7 @@ function TransactionsView({ txns, byCategory }: {
                 <th className="text-left font-semibold text-[var(--fw-text-2)] px-4 py-2.5 text-[11px] uppercase tracking-wider">Category</th>
                 <th className="text-left font-semibold text-[var(--fw-text-2)] px-4 py-2.5 text-[11px] uppercase tracking-wider">Source</th>
                 <th className="text-right font-semibold text-[var(--fw-text-2)] px-4 py-2.5 text-[11px] uppercase tracking-wider">Amount</th>
+                <th className="text-right font-semibold text-[var(--fw-text-2)] px-4 py-2.5 text-[11px] uppercase tracking-wider\">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1427,6 +1496,11 @@ function TransactionsView({ txns, byCategory }: {
                   <td className={`px-4 py-2.5 text-right tnum font-semibold whitespace-nowrap ${t.direction === 'credit' ? 'text-[var(--fw-positive)]' : 'text-[var(--fw-text)]'}`}>
                     {t.direction === 'credit' ? '+' : '-'}{fmt(t.amountCents)}
                   </td>
+                  <td className="px-4 py-2.5 text-right">
+                    <Button variant="ghost" size="sm" onClick={() => handleDeleteTransaction(t.id)} className="text-[var(--fw-negative)] hover:bg-[var(--fw-negative-soft)]">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1445,9 +1519,147 @@ function TransactionsView({ txns, byCategory }: {
           </div>
         )}
       </Card>
+      {addOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--fw-text)]/40 backdrop-blur-sm" onClick={() => setAddOpen(false)}>
+          <div className="bg-[var(--fw-surface)] border border-[var(--fw-border)] rounded-2xl p-5 sm:p-6 w-full sm:w-[440px] shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Add {addType === 'debit' ? 'Expense' : 'Income'}</h3>
+              <Button variant="ghost" size="sm" onClick={() => setAddOpen(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <form onSubmit={(e) => { e.preventDefault(); handleAddTransaction() }} className="space-y-3">
+              <div>
+                <label className="text-[11px] uppercase text-[var(--fw-text-3)] font-medium block mb-1.5">Type</label>
+                <Select value={addType} onValueChange={v => setAddType(v)}>
+                  <SelectTrigger className="h-9 text-[12px] border-[var(--fw-border)] rounded-lg bg-[var(--fw-surface-2)]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="debit">Expense</SelectItem>
+                    <SelectItem value="credit">Income</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-[11px] uppercase text-[var(--fw-text-3)] font-medium block mb-1.5">Amount</label>
+                <Input value={addAmount} onChange={e => setAddAmount(e.target.value)} placeholder="0.00" className="h-9 text-[12px] border-[var(--fw-border)] rounded-lg bg-[var(--fw-surface-2)]" />
+              </div>
+              <div>
+                <label className="text-[11px] uppercase text-[var(--fw-text-3)] font-medium block mb-1.5">Merchant</label>
+                <Input value={addMerchant} onChange={e => setAddMerchant(e.target.value)} placeholder="e.g. Grocery Store" className="h-9 text-[12px] border-[var(--fw-border)] rounded-lg bg-[var(--fw-surface-2)]" />
+              </div>
+              <div>
+                <label className="text-[11px] uppercase text-[var(--fw-text-3)] font-medium block mb-1.5">Category</label>
+                <Input value={addCategory} onChange={e => setAddCategory(e.target.value)} list="add-cats" placeholder="e.g. Groceries" className="h-9 text-[12px] border-[var(--fw-border)] rounded-lg bg-[var(--fw-surface-2)]" />
+                <datalist id="add-cats">{byCategory.map(c => <option key={c.name} value={c.name} />)}</datalist>
+              </div>
+              <div>
+                <label className="text-[11px] uppercase text-[var(--fw-text-3)] font-medium block mb-1.5">Date</label>
+                <Input type="date" value={addDate} onChange={e => setAddDate(e.target.value)} className="h-9 text-[12px] border-[var(--fw-border)] rounded-lg bg-[var(--fw-surface-2)]" />
+              </div>
+              <div className="flex justify-end gap-2 mt-2 pt-2 border-t border-[var(--fw-border)]/30">
+                <Button variant="outline" size="sm" onClick={() => setAddOpen(false)}>Cancel</Button>
+                <Button disabled={!addMerchant.trim() || !addCategory.trim() || !addAmount || parseFloat(addAmount) <= 0} onClick={(e) => { e.preventDefault(); handleAddTransaction() }}>Add Transaction</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
+
+// ═══ View: Analysis ════════════════════════════════════════════════════
+function AnalysisView({ txns, byCategory, byMonth, totalSpend, totalIncome }: {
+  txns: Txn[]
+  byCategory: { name: string; color: string; cents: number; count: number }[]
+  byMonth: { month: string; spendCents: number; incomeCents: number }[]
+  totalSpend: number
+  totalIncome: number
+}) {
+  const net = totalIncome - totalSpend
+  const topCategories = byCategory.slice(0, 8)
+
+  return (
+    <div className="p-6 sm:p-8 lg:p-10 space-y-6 max-w-[1200px]">
+      <div>
+        <h1 className="text-[28px] font-semibold tracking-tight">Spending Analysis</h1>
+        <p className="text-[13px] text-[var(--fw-text-3)] mt-1">
+          Where your money goes and how it compares to what comes in
+        </p>
+      </div>
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl">
+          <div className="text-[11px] uppercase tracking-[0.12em] text-[var(--fw-text-3)] font-semibold mb-2">Total Spending</div>
+          <div className="text-[28px] font-semibold tnum text-[var(--fw-negative)]">{fmt(totalSpend)}</div>
+        </Card>
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl">
+          <div className="text-[11px] uppercase tracking-[0.12em] text-[var(--fw-text-3)] font-semibold mb-2">Total Income</div>
+          <div className="text-[28px] font-semibold tnum text-[var(--fw-positive)]">{fmt(totalIncome)}</div>
+        </Card>
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl">
+          <div className="text-[11px] uppercase tracking-[0.12em] text-[var(--fw-text-3)] font-semibold mb-2">Net Savings</div>
+          <div className={`text-[28px] font-semibold tnum ${net >= 0 ? 'text-[var(--fw-positive)]' : 'text-[var(--fw-negative)]'}`}>{fmt(net, { sign: true })}</div>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Spend by category */}
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold">Spending by Category</h3>
+            <span className="text-[10px] font-medium text-[var(--fw-text-3)]">{topCategories.length} categories</span>
+          </div>
+          <div className="space-y-2">
+            {topCategories.map((c) => {
+              const pct = totalSpend > 0 ? Math.round((c.cents / totalSpend) * 100) : 0
+              return (
+                <div key={c.name} className="flex items-center gap-3">
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: c.color }} />
+                  <span className="flex-1 text-[12px] text-[var(--fw-text-2)] truncate">{c.name}</span>
+                  <span className="w-20 text-right text-[12px] font-mono tnum">{fmt(c.cents)}</span>
+                  <span className="w-12 text-[10px] text-[var(--fw-text-3)]">{pct}%</span>
+                </div>
+              )
+            })}
+            {topCategories.length === 0 && (
+              <div className="py-4 text-center text-xs text-[var(--fw-text-3)]">No spending data yet. Add expenses to see analysis.</div>
+            )}
+          </div>
+        </Card>
+
+        {/* Monthly income vs spending trend */}
+        <Card className="p-5 border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] rounded-xl">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold">Monthly Income vs Spending</h3>
+          </div>
+          <div className="h-48 w-full">
+            {byMonth.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={byMonth}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <Tooltip />
+                  <Bar dataKey="spendCents" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="incomeCents" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-xs text-[var(--fw-text-3)]">No monthly data yet. Add transactions to see the trend.</div>
+            )}
+          </div>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+// ═══ View: Budgets ══════════════════════════════════════════════════════
 
 // ═══ View: Budgets ════════════════════════════════════════════════════
 function BudgetsView({ budgets, tier, onUpdate }: { budgets: BudgetItem[]; tier: Tier; onUpdate: () => void }) {

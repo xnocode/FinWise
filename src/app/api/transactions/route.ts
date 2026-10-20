@@ -70,6 +70,44 @@ export async function GET(req: NextRequest) {
 // CSV upload endpoint
 export async function POST(req: NextRequest) {
   try {
+    const contentType = req.headers.get('content-type') || ''
+    const auth = await requireUser(req)
+    if (auth.error) return auth.error
+    const user = auth.user
+
+    // ─── Single transaction add (JSON body) ───
+    if (contentType.includes('application/json')) {
+      const body = await req.json()
+      const { merchantRaw, amountCents, direction = 'debit', category, date } = body
+      if (!merchantRaw || !amountCents || !category || !date) {
+        return NextResponse.json({ ok: false, error: 'merchantRaw, amountCents, category and date are required' }, { status: 400 })
+      }
+      const cents = Math.abs(Math.round(Number(amountCents)))
+      if (!cents) {
+        return NextResponse.json({ ok: false, error: 'Amount must be greater than zero' }, { status: 400 })
+      }
+      const categories = await ensureDefaultCategories()
+      let cat = categories.find(c => c.name.toLowerCase() === String(category).toLowerCase())
+      if (!cat) {
+        cat = await db.category.create({ data: { name: String(category), color: '#6366f1' } })
+      }
+      await db.transaction.create({
+        data: {
+          userId: user.id,
+          categoryId: cat.id,
+          date: new Date(String(date)),
+          amountCents: cents,
+          direction: String(direction),
+          currency: 'USD',
+          merchantRaw: String(merchantRaw),
+          merchantNorm: String(merchantRaw).toLowerCase().replace(/[^a-z0-9]/g, '-'),
+          source: 'manual',
+          confidence: 1,
+        },
+      })
+      return NextResponse.json({ ok: true })
+    }
+
     const formData = await req.formData()
     const file = formData.get('file') as File
     if (!file) return NextResponse.json({ ok: false, error: 'No file uploaded' }, { status: 400 })
@@ -87,10 +125,6 @@ export async function POST(req: NextRequest) {
     if (dateIdx === -1 || amtIdx === -1) {
       return NextResponse.json({ ok: false, error: 'CSV must contain date and amount columns' }, { status: 400 })
     }
-
-    const auth = await requireUser(req)
-    if (auth.error) return auth.error
-    const user = auth.user
 
     const categories = await ensureDefaultCategories()
     const catMap = new Map(categories.map(c => [c.name.toLowerCase(), c.id]))
