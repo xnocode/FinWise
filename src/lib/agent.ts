@@ -484,10 +484,10 @@ export const TOOL_SCHEMAS = Object.entries(TOOLS).map(([name, t]) => ({
 
 // ─── Intent router (the Supervisor) ──────────────────────────────────────
 
-function routeIntent(message: string): {
+async function routeIntent(message: string, ctx: ToolContext): Promise<{
   mode: 'quick_qa' | 'monthly_review' | 'goal_planning' | 'write'
   tools: { name: string; args: any }[]
-} {
+}> {
   const lower = message.toLowerCase()
 
   // ─── WRITE intents — detect add/create/update/delete commands ────
@@ -567,14 +567,36 @@ function routeIntent(message: string): {
     }
   }
 
-  // Delete transaction: "delete my last transaction" or "remove the $50 transaction"
-  const deleteMatch = message.match(/(?:delete|remove|erase)\s+(?:my\s+)?(?:last\s+)?transaction/i)
-  if (deleteMatch) {
+  // Delete transaction: "delete my last transaction" or "remove the $50 transaction" or "i didn't spend anything delete the data" or "undo that"
+  const deleteMatch = message.match(/(?:delete|remove|erase|undo)\s+(?:my\s+)?(?:last\s+)?(?:transaction|expense|purchase|that|it|the\s+data|this)/i)
+  const deleteAltMatch = message.match(/(?:didn.?t\s+spend|didn.?t\s+buy|never\s+spent|remove\s+(?:the\s+)?(?:last|that|recent))/i)
+  if (deleteMatch || deleteAltMatch) {
     const args: any = {}
     const amountMatch = message.match(/\$?\s*(\d+(?:\.\d{1,2})?)/)
     if (amountMatch) args.amountCents = Math.round(parseFloat(amountMatch[1]) * 100)
     const merchantMatch = message.match(/(?:at|from|@)\s+([A-Z][\w\s&'-]+)/)
     if (merchantMatch) args.merchant = merchantMatch[1].trim()
+    // If no specific amount or merchant, delete the most recent agent-added transaction
+    if (!args.amountCents && !args.merchant) {
+      // Find the most recent transaction added by the agent
+      const recent = await db.transaction.findFirst({
+        where: { userId: ctx.userId, source: 'agent' },
+        orderBy: { createdAt: 'desc' },
+      })
+      if (recent) {
+        args.transactionId = recent.id
+      } else {
+        // No agent-added transaction — find the most recent transaction
+        const anyRecent = await db.transaction.findFirst({
+          where: { userId: ctx.userId },
+          orderBy: { date: 'desc' },
+        })
+        if (anyRecent) {
+          args.merchant = anyRecent.merchantRaw
+          args.amountCents = anyRecent.amountCents
+        }
+      }
+    }
     return {
       mode: 'write',
       tools: [{ name: 'delete_transaction', args }],
@@ -638,7 +660,7 @@ export async function runAgent(
   history: { role: string; content: string }[] = []
 ): Promise<{ response: string; mode: string; toolResults: ToolResult[]; toolCalls: any[] }> {
   // 1. Route intent (Supervisor)
-  const { mode, tools } = routeIntent(userMessage)
+  const { mode, tools } = await routeIntent(userMessage, ctx)
 
   // 2. Execute tools in parallel (Workers)
   const toolResults: ToolResult[] = []

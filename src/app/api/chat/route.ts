@@ -53,9 +53,9 @@ export async function POST(req: NextRequest) {
       ],
     })
 
-    // Detect if any write tool was called — flag for client refresh
+    // Detect if any write tool was called AND succeeded — flag for client refresh
     const writeTools = ['add_transaction', 'create_goal', 'update_budget', 'delete_transaction', 'categorize_merchant']
-    const triggeredWrites = result.toolCalls.some((tc: any) => writeTools.includes(tc.name))
+    const triggeredWrites = result.toolCalls.some((tc: any) => writeTools.includes(tc.name) && tc.success !== false)
 
     return NextResponse.json({
       ok: true,
