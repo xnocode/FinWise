@@ -17,8 +17,8 @@ const jetbrains = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "FinWise — Intelligent Personal Finance",
-  description: "FinWise is an AI agent that delivers smart budgeting, bill analysis, and spending insights with actionable recommendations. Built for the PBCSF International Track.",
-  keywords: ["FinWise", "Personal Finance", "AI Agent", "Budgeting", "PBCSF", "WeBank"],
+  description: "FinWise is an AI agent that delivers smart budgeting, bill analysis, and spending insights with actionable recommendations.",
+  keywords: ["FinWise", "Personal Finance", "AI Agent", "Budgeting"],
   authors: [{ name: "FinWise Team" }],
   icons: {
     icon: "/logo.svg",

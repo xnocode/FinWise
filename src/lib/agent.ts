@@ -2,6 +2,7 @@
 // Implements a supervisor-worker pattern with tool calling
 import { db } from '@/lib/db'
 import { convertToUsdCents } from '@/lib/rates'
+import { runFreeLLM } from '@/lib/free-llm'
 import type { Transaction, Category, Budget, Goal, Recommendation } from '@prisma/client'
 
 // ─── Tool implementations ───────────────────────────────────────────────
@@ -842,18 +843,17 @@ ${JSON.stringify(toolResults.map(r => ({ tool: r.tool, summary: r.summary, data:
       const apiData = await apiRes.json()
       response = apiData.choices?.[0]?.message?.content || 'I apologize, I could not process your request. Please try again.'
     } else {
-      // ─── Default: Z.ai SDK ────────────────────────────────────
-      const ZAI = (await import('z-ai-web-dev-sdk')).default
-      const zai = await ZAI.create()
-      const completion = await zai.chat.completions.create({
-        messages: [
-          { role: 'assistant', content: systemPrompt },
-          ...history.slice(-6).map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-          { role: 'user', content: userMessage },
-        ],
-        thinking: { type: 'disabled' },
-      })
-      response = completion.choices[0]?.message?.content || 'I apologize, I could not process your request. Please try again.'
+      // ─── Default: free local LLM (no API key, works anywhere) ───
+      try {
+        response = await runFreeLLM({
+          systemPrompt,
+          history,
+          userMessage,
+        })
+      } catch (freeErr: any) {
+        console.error('Free LLM failed:', freeErr.message)
+        response = 'I could not process your request. Please try again.'
+      }
     }
   } catch (err: any) {
     console.error('LLM call failed:', err.message)
@@ -865,7 +865,7 @@ ${JSON.stringify(toolResults.map(r => ({ tool: r.tool, summary: r.summary, data:
 }
 
 function buildFallbackResponse(message: string, mode: string, results: ToolResult[]): string {
-  const LLM_NOTE = '\n\n_Note: no LLM is configured, so this is a structured summary. Add an LLM provider + API key in Settings → AI Agent for full natural-language answers._'
+  const LLM_NOTE = '\n\n_Note: running on the free local LLM (no API key). For longer replies, configure OpenAI/Anthropic in Settings → AI Agent._'
 
   if (mode === 'write') {
     const ok = results.filter(r => r.success)
@@ -911,6 +911,6 @@ function buildFallbackResponse(message: string, mode: string, results: ToolResul
     if (!r.success) return `- **${r.tool.replace(/^get_/, '')}** — unavailable: ${r.summary}`
     return `- ${r.summary}`
   })
-  if (lines.length === 0) return 'I could not process your request. Try rephrasing, or configure an LLM in Settings.'
+  if (lines.length === 0) return 'I could not process your request. Try rephrasing.'
   return `Here's what I found:\n\n${lines.join('\n')}${LLM_NOTE}`
 }

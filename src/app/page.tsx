@@ -4762,7 +4762,7 @@ function SettingsView({ data, loading, onRefresh, onUpdate, tier, setTier, priva
           <div className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-[var(--fw-surface-2)] transition-colors">
             <div>
               <div className="text-[12px] font-medium">On-device answers</div>
-              <div className="text-[10px] text-[var(--fw-text-3)]">Skip the cloud LLM. The agent answers from your database tools only.</div>
+              <div className="text-[10px] text-[var(--fw-text-3)]">On-device answers only. The agent answers from your database tools only.</div>
             </div>
             <Switch
               checked={privacyMode}
@@ -4847,26 +4847,18 @@ function SettingsView({ data, loading, onRefresh, onUpdate, tier, setTier, priva
           <Info className="h-4 w-4 text-[var(--fw-text-3)]" />
           <h2 className="text-[14px] font-semibold">About FinWise</h2>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[11px]">
+        <div className="grid grid-cols-2 gap-3 text-[11px]">
           <div>
             <div className="text-[var(--fw-text-3)]">Version</div>
             <div className="font-mono text-[var(--fw-text-2)] font-medium">v1.0.0</div>
           </div>
           <div>
-            <div className="text-[var(--fw-text-3)]">Track</div>
-            <div className="font-mono text-[var(--fw-text-2)] font-medium">PBCSF Topic A</div>
-          </div>
-          <div>
             <div className="text-[var(--fw-text-3)]">Framework</div>
             <div className="font-mono text-[var(--fw-text-2)] font-medium">Next.js 16</div>
           </div>
-          <div>
-            <div className="text-[var(--fw-text-3)]">LLM</div>
-            <div className="font-mono text-[var(--fw-text-2)] font-medium">Z.ai Chat</div>
-          </div>
         </div>
         <div className="mt-3 pt-3 border-t border-[var(--fw-border)] text-[10px] text-[var(--fw-text-3)]">
-          FinWise is an agentic AI personal finance copilot with 11 tools, 14 API endpoints, 8 views, and 20+ features. Built for the PBCSF International Track competition.
+          FinWise is an agentic AI personal finance copilot with 11 tools, 14 API endpoints, 8 views, and 20+ features.
         </div>
       </Card>
     </div>
@@ -4900,10 +4892,7 @@ function LandingPage({ onGetStarted, onSignIn }: { onGetStarted: () => void; onS
 
       {/* Hero */}
       <section className="px-6 py-20 max-w-[1200px] mx-auto text-center">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--fw-accent-soft)] border border-[var(--fw-accent-border)] mb-6">
-          <span className="h-1.5 w-1.5 rounded-full bg-[var(--fw-positive)] fw-pulse" />
-          <span className="text-[11px] font-semibold text-[var(--fw-accent)] uppercase tracking-wider">PBCSF International Track · Topic A</span>
-        </div>
+
         <h1 className="text-[48px] sm:text-[64px] font-bold tracking-tight leading-tight mb-4">
           Your money, <br />
           <span className="bg-gradient-to-r from-[var(--fw-accent)] to-[var(--fw-accent-hover)] bg-clip-text text-transparent">
@@ -4942,7 +4931,7 @@ function LandingPage({ onGetStarted, onSignIn }: { onGetStarted: () => void; onS
             { icon: Dna, title: 'Personality DNA', desc: 'Discover your financial archetype — Architect, Free Spirit, Climber, Guardian, or Explorer — with personalized recommendations.' },
             { icon: CreditCard, title: 'Debt Payoff Planner', desc: 'Compare Avalanche vs Snowball strategies with month-by-month simulation. See exactly when you\'ll be debt-free.' },
             { icon: Globe, title: '166 World Currencies', desc: 'Switch between any world currency with live exchange rates. All amounts auto-convert instantly across the entire app.' },
-            { icon: ShieldIcon, title: 'Viewer and Editor access', desc: 'Viewer is read-only. Editor can add and edit your own records. On-device mode answers from your data without calling a cloud LLM.' },
+            { icon: ShieldIcon, title: 'Viewer and Editor access', desc: 'Viewer is read-only. Editor can add and edit your own records. On-device mode answers from your data.' },
             { icon: RocketIcon, title: 'Innovation Lab', desc: '5 novel features: Future Self Simulator, Behavioral Triggers, Time-Value Calculator, Goal Collisions, and more.' },
           ].map((f, i) => (
             <div key={i} className="p-5 rounded-2xl border border-[var(--fw-border)] bg-[var(--fw-surface)] shadow-[var(--fw-shadow-sm)] hover:shadow-[var(--fw-shadow-md)] transition-shadow">
@@ -4976,8 +4965,8 @@ function LandingPage({ onGetStarted, onSignIn }: { onGetStarted: () => void; onS
       <footer className="px-6 py-8 border-t border-[var(--fw-border)]">
         <div className="max-w-[1200px] mx-auto flex flex-wrap items-center justify-between gap-3 text-[11px] text-[var(--fw-text-3)]">
           <span className="font-medium text-[var(--fw-text-2)]">FinWise</span>
-          <span>PBCSF International Track · Topic A · Personal Finance Assistant AI Agent</span>
-          <span>Built with Next.js 16 · Z.ai LLM · 166 currencies</span>
+          <span>Personal Finance Assistant AI Agent</span>
+          <span>Built with Next.js 16 · 166 currencies</span>
         </div>
       </footer>
     </div>
