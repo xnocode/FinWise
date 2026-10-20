@@ -2,6 +2,7 @@
 // Solves: "I need to share my financial data with an accountant or for tax purposes"
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getUserEmail } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,7 +20,7 @@ export async function GET(req: Request) {
   const format = url.searchParams.get('format') || 'csv'
   const range = url.searchParams.get('range') || '12m'
 
-  const user = await db.user.findUnique({ where: { email: 'demo@example.com' } })
+  const user = await db.user.findUnique({ where: { email: getUserEmail(req) } })
   if (!user) return NextResponse.json({ ok: false, error: 'No user' }, { status: 404 })
 
   const now = new Date()

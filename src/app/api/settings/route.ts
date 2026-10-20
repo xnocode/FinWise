@@ -1,11 +1,12 @@
 // Settings endpoint — GET current settings, PATCH to update
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getUserEmail } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
-  const user = await db.user.findUnique({ where: { email: 'demo@example.com' }, include: { settings: true } })
+export async function GET(req: NextRequest) {
+  const user = await db.user.findUnique({ where: { email: getUserEmail(req) }, include: { settings: true } })
   if (!user) return NextResponse.json({ ok: false, error: 'No user' }, { status: 404 })
 
   // Create default settings if none exist
@@ -20,7 +21,7 @@ export async function GET() {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json()
-    const user = await db.user.findUnique({ where: { email: 'demo@example.com' } })
+    const user = await db.user.findUnique({ where: { email: getUserEmail(req) } })
     if (!user) return NextResponse.json({ ok: false, error: 'No user' }, { status: 404 })
 
     // Ensure settings record exists

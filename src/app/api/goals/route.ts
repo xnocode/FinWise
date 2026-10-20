@@ -1,11 +1,12 @@
 // Goals endpoint
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getUserEmail } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
-  const user = await db.user.findUnique({ where: { email: 'demo@example.com' } })
+export async function GET(req: NextRequest) {
+  const user = await db.user.findUnique({ where: { email: getUserEmail(req) } })
   if (!user) return NextResponse.json({ ok: false, error: 'No user' }, { status: 404 })
 
   const goals = await db.goal.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'asc' } })
@@ -27,7 +28,7 @@ export async function PATCH(req: NextRequest) {
     const { id, monthlyContributionCents } = body
     if (!id) return NextResponse.json({ ok: false, error: 'id required' }, { status: 400 })
 
-    const user = await db.user.findUnique({ where: { email: 'demo@example.com' } })
+    const user = await db.user.findUnique({ where: { email: getUserEmail(req) } })
     if (!user) return NextResponse.json({ ok: false, error: 'No user' }, { status: 404 })
 
     if (user.tier === 'Viewer') {

@@ -1,11 +1,12 @@
 // Recommendations endpoint
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getUserEmail } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
-  const user = await db.user.findUnique({ where: { email: 'demo@example.com' } })
+export async function GET(req: NextRequest) {
+  const user = await db.user.findUnique({ where: { email: getUserEmail(req) } })
   if (!user) return NextResponse.json({ ok: false, error: 'No user' }, { status: 404 })
 
   const recs = await db.recommendation.findMany({
@@ -29,7 +30,7 @@ export async function PATCH(req: NextRequest) {
     if (!id || !['accepted', 'dismissed', 'pending'].includes(status)) {
       return NextResponse.json({ ok: false, error: 'id and valid status required' }, { status: 400 })
     }
-    const user = await db.user.findUnique({ where: { email: 'demo@example.com' } })
+    const user = await db.user.findUnique({ where: { email: getUserEmail(req) } })
     if (!user) return NextResponse.json({ ok: false, error: 'No user' }, { status: 404 })
 
     if (user.tier === 'Viewer') {

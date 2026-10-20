@@ -212,12 +212,26 @@ export default function Home() {
         setAuthUser(d.user)
         localStorage.setItem('finwise_session', d.sessionToken)
         localStorage.setItem('finwise_user', JSON.stringify(d.user))
+        // Set cookie so all API requests automatically include the user's email
+        document.cookie = `finwise_email=${d.user.email}; path=/; max-age=${60*60*24*30}; SameSite=Lax`
+        // Use the logged-in user's email for seeding — NOT the demo user
+        const userEmail = d.user.email
+        try {
+          await fetch('/api/seed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-User-Email': userEmail },
+          })
+        } catch (e) {
+          console.error('Seed failed for new user:', e)
+        }
         if (action === 'demo') {
           setAppState('app')
-          handleSeed()
+          setSeeded(true)
+          loadDashboard()
         } else {
           setAppState('onboarding')
-          handleSeed()
+          setSeeded(true)
+          loadDashboard()
         }
         toast.success(action === 'demo' ? 'Welcome to FinWise!' : `Account created! Welcome, ${d.user.name}`)
       } else {
@@ -235,6 +249,9 @@ export default function Home() {
     setAppState('landing')
     localStorage.removeItem('finwise_session')
     localStorage.removeItem('finwise_user')
+    localStorage.removeItem('finwise_onboarding')
+    // Clear the email cookie
+    document.cookie = 'finwise_email=; path=/; max-age=0'
     setCompletedTasks(new Set())
     toast.success('Signed out')
   }
@@ -247,6 +264,8 @@ export default function Home() {
       try {
         const user = JSON.parse(userStr)
         setAuthUser(user)
+        // Restore cookie for API requests
+        document.cookie = `finwise_email=${user.email}; path=/; max-age=${60*60*24*30}; SameSite=Lax`
         setAppState('app')
         handleSeed()
       } catch {}
@@ -354,7 +373,11 @@ export default function Home() {
   const handleSeed = async () => {
     setSeeding(true)
     try {
-      const res = await fetch('/api/seed', { method: 'POST' })
+      const headers: Record<string, string> = {}
+      if (authUser?.email) {
+        headers['X-User-Email'] = authUser.email
+      }
+      const res = await fetch('/api/seed', { method: 'POST', headers })
       const d = await res.json()
       if (d.ok) {
         toast.success('Dataset regenerated', {
@@ -509,9 +532,11 @@ export default function Home() {
     setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight }, 50)
 
     try {
+      const chatHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (authUser?.email) chatHeaders['X-User-Email'] = authUser.email
       const res = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: chatHeaders,
         body: JSON.stringify({
           message: msg,
           history: messages.map(m => ({ role: m.role, content: m.content })),
@@ -633,8 +658,12 @@ export default function Home() {
         userName={authUser?.name || 'there'}
         tasks={ONBOARDING_TASKS}
         completedTasks={completedTasks}
-        onComplete={() => { setAppState('app'); handleSeed() }}
-        onSkip={() => { setAppState('app'); handleSeed() }}
+        onComplete={() => {
+          setAppState('app')
+        }}
+        onSkip={() => {
+          setAppState('app')
+        }}
       />
     )
   }

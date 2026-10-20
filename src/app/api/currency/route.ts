@@ -3,6 +3,7 @@
 // Caches rates for 1 hour to avoid rate limiting
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getUserEmail } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -293,11 +294,11 @@ async function fetchLiveRates(): Promise<Record<string, number>> {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     // Get user's selected currency
     const user = await db.user.findUnique({
-      where: { email: 'demo@example.com' },
+      where: { email: getUserEmail(req) },
       include: { settings: true },
     })
 

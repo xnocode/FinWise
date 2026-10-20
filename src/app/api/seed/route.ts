@@ -1,12 +1,14 @@
-// Seed endpoint: generates 12 months of synthetic data for the demo user
-import { NextResponse } from 'next/server'
+// Seed endpoint: generates 12 months of synthetic data for the logged-in user
+import { NextRequest, NextResponse } from 'next/server'
 import { seedUserData } from '@/lib/seed'
+import { getUserEmail } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   try {
-    const result = await seedUserData('demo@example.com')
+    const userEmail = getUserEmail(req)
+    const result = await seedUserData(userEmail)
     return NextResponse.json({ ok: true, ...result })
   } catch (err: any) {
     console.error('Seed error:', err)

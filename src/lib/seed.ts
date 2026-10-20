@@ -81,16 +81,20 @@ export async function seedUserData(userEmail: string) {
     })
   }
 
-  // Create categories (clear old first)
+  // Delete ONLY this user's data (not global categories)
   await db.transaction.deleteMany({ where: { userId: user.id } })
   await db.budget.deleteMany({ where: { userId: user.id } })
   await db.recommendation.deleteMany({ where: { userId: user.id } })
   await db.goal.deleteMany({ where: { userId: user.id } })
-  await db.category.deleteMany({})
 
+  // Get or create categories (don't delete existing — they're shared)
   const categoryMap: Record<string, { id: string; color: string }> = {}
   for (const c of CATEGORIES) {
-    const cat = await db.category.create({ data: { name: c.name, color: c.color, icon: c.icon } })
+    // Try to find existing category first
+    let cat = await db.category.findFirst({ where: { name: c.name } })
+    if (!cat) {
+      cat = await db.category.create({ data: { name: c.name, color: c.color, icon: c.icon } })
+    }
     categoryMap[c.name] = { id: cat.id, color: c.color }
   }
 

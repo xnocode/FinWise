@@ -1,6 +1,7 @@
 // Onboarding endpoint — track onboarding task completion
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getUserEmail } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,8 +15,9 @@ const ONBOARDING_TASKS = [
   { id: 'visit_innovation', label: 'Discover Innovation Lab', description: 'Find your Financial Personality DNA and Future Self projection', view: 'innovation' },
 ]
 
-export async function GET() {
-  const user = await db.user.findUnique({ where: { email: 'demo@example.com' }, include: { settings: true } })
+export async function GET(req: NextRequest) {
+  const userEmail = getUserEmail(req)
+  const user = await db.user.findUnique({ where: { email: userEmail }, include: { settings: true } })
   if (!user) return NextResponse.json({ ok: false, error: 'No user' }, { status: 404 })
 
   // Get completed tasks from settings (stored as JSON string in a field)

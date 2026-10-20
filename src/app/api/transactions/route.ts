@@ -1,6 +1,7 @@
 // Transactions endpoint — list, stats, and CSV upload
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getUserEmail } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,7 +10,7 @@ export async function GET(req: NextRequest) {
   const range = url.searchParams.get('range') || '12m'
   const category = url.searchParams.get('category')
 
-  const user = await db.user.findUnique({ where: { email: 'demo@example.com' } })
+  const user = await db.user.findUnique({ where: { email: getUserEmail(req) } })
   if (!user) return NextResponse.json({ ok: false, error: 'No data. Call POST /api/seed first.' }, { status: 404 })
 
   const now = new Date()
@@ -85,7 +86,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'CSV must contain date and amount columns' }, { status: 400 })
     }
 
-    const user = await db.user.findUnique({ where: { email: 'demo@example.com' } })
+    const user = await db.user.findUnique({ where: { email: getUserEmail(req) } })
     if (!user) return NextResponse.json({ ok: false, error: 'No user. Seed first.' }, { status: 404 })
 
     const categories = await db.category.findMany()

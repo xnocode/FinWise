@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { runAgent, type ToolContext } from '@/lib/agent'
+import { getUserEmail } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -15,10 +16,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Get or create the demo user
-    let user = await db.user.findUnique({ where: { email: 'demo@example.com' } })
+    let user = await db.user.findUnique({ where: { email: getUserEmail(req) } })
     if (!user) {
       user = await db.user.create({
-        data: { email: 'demo@example.com', name: 'Demo User', tier, privacyMode },
+        data: { email: getUserEmail(req), name: 'Demo User', tier, privacyMode },
       })
     }
 

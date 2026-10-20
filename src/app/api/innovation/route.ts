@@ -6,6 +6,7 @@
 // 5. Goal Collision Detector — multi-goal constraint solver
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getUserEmail } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -379,8 +380,8 @@ function detectGoalCollisions(goals: any[], monthlySavingsPool: number): {
 }
 
 // ─── Main GET handler ───────────────────────────────────────────────────
-export async function GET() {
-  const user = await db.user.findUnique({ where: { email: 'demo@example.com' } })
+export async function GET(req: NextRequest) {
+  const user = await db.user.findUnique({ where: { email: getUserEmail(req) } })
   if (!user) return NextResponse.json({ ok: false, error: 'No user' }, { status: 404 })
 
   const now = new Date()
