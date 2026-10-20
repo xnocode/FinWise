@@ -82,5 +82,5 @@ $HOME/.cloudflared/
 /scripts/
 
 # Seed / demo-data generator
-src/lib/seed.ts
+# src/lib/seed.ts is safe to commit (no demo data — only default categories)
 src/app/api/seed/
