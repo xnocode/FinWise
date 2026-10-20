@@ -31,7 +31,7 @@ model UserSettings {
   id                   String   @id @default(cuid())
   userId               String   @unique
   // Profile
-  displayName          String   @default("Demo User")
+  displayName          String   @default("")
   avatarColor          String   @default("#6366f1")
   // Appearance
   theme                String   @default("light") // light | dark

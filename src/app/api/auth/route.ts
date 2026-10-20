@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
           name: name.trim(),
           tier: 'Editor',
           privacyMode: false,
-          settings: { create: {} },
+          settings: { create: { displayName: name.trim() } },
         },
       })
 

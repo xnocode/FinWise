@@ -212,26 +212,28 @@ export default function Home() {
         setAuthUser(d.user)
         localStorage.setItem('finwise_session', d.sessionToken)
         localStorage.setItem('finwise_user', JSON.stringify(d.user))
+        // Set cookie FIRST so all subsequent API requests use the correct user
         document.cookie = `finwise_email=${d.user.email}; path=/; max-age=${60*60*24*30}; SameSite=Lax`
 
         if (action === 'demo') {
+          // Demo user: seed with sample data
           setAppState('app')
-          setSeeded(true)
-          handleSeed()
+          handleSeed()  // This will setSeeded(true) and loadDashboard()
           toast.success('Welcome to FinWise Demo!')
         } else if (action === 'signup') {
-          // New user: NO data seeded
-          setAppState('onboarding')
+          // New user: NO data seeded — completely empty account
           setSeeded(true)
+          loadDashboard()  // Load (empty) dashboard data for this user
+          setAppState('onboarding')
           toast.success(`Account created! Welcome, ${d.user.name}`)
         } else {
+          // Login: load existing user's data (no seeding)
           setAppState('app')
           setSeeded(true)
           loadDashboard()
           toast.success(`Welcome back, ${d.user.name}!`)
         }
       } else {
-        // Show inline API error on the form
         toast.error(d.error || 'Authentication failed')
       }
     } catch (err: any) {
@@ -264,7 +266,9 @@ export default function Home() {
         // Restore cookie for API requests
         document.cookie = `finwise_email=${user.email}; path=/; max-age=${60*60*24*30}; SameSite=Lax`
         setAppState('app')
-        handleSeed()
+        // For returning users: load their data (NOT seed — only load what they have)
+        setSeeded(true)
+        loadDashboard()
       } catch {}
     }
   }, [])
