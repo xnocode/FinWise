@@ -212,30 +212,26 @@ export default function Home() {
         setAuthUser(d.user)
         localStorage.setItem('finwise_session', d.sessionToken)
         localStorage.setItem('finwise_user', JSON.stringify(d.user))
-        // Set cookie so all API requests automatically include the user's email
         document.cookie = `finwise_email=${d.user.email}; path=/; max-age=${60*60*24*30}; SameSite=Lax`
 
         if (action === 'demo') {
-          // Demo user: seed with sample data
           setAppState('app')
           setSeeded(true)
           handleSeed()
           toast.success('Welcome to FinWise Demo!')
         } else if (action === 'signup') {
-          // New user: NO data seeded — starts completely empty
-          // Go straight to the guided tour
+          // New user: NO data seeded
           setAppState('onboarding')
-          setSeeded(true)  // Mark as seeded so dashboard loads (with empty state)
+          setSeeded(true)
           toast.success(`Account created! Welcome, ${d.user.name}`)
         } else {
-          // Login: load existing user's data
           setAppState('app')
           setSeeded(true)
           loadDashboard()
           toast.success(`Welcome back, ${d.user.name}!`)
         }
       } else {
-        // Show the error message from the API
+        // Show inline API error on the form
         toast.error(d.error || 'Authentication failed')
       }
     } catch (err: any) {
@@ -1180,7 +1176,7 @@ function OverviewView(props: {
                   />
                 </Treemap>
               </ResponsiveContainer>
-            ) : <Loading />}
+            ) : <EmptyState icon={BarChart3} title="No data yet" description="Add transactions via the agent chat to see your spending visualization here." />}
           </div>
         </Card>
 
@@ -1226,7 +1222,7 @@ function OverviewView(props: {
                   <Area type="monotone" dataKey="spendCents" stroke="var(--fw-negative)" strokeWidth={2} fill="url(#spendGrad)" name="Spend" />
                 </AreaChart>
               </ResponsiveContainer>
-            ) : <Loading />}
+            ) : <EmptyState icon={BarChart3} title="No data yet" description="Add transactions via the agent chat to see your spending visualization here." />}
           </div>
         </Card>
       </div>
@@ -1253,7 +1249,7 @@ function OverviewView(props: {
           </div>
           <div className="space-y-3">
             {budgets.slice(0, 6).map((b) => <BudgetRow key={b.id} b={b} tier={tier} onUpdate={() => props.onRefresh()} />)}
-            {budgets.length === 0 && <Loading />}
+            {budgets.length === 0 && <EmptyState icon={Wallet} title="No budgets yet" description="Set up monthly budget envelopes for each spending category to track your spending limits." />}
           </div>
         </Card>
 
@@ -1271,7 +1267,7 @@ function OverviewView(props: {
             {recs.filter(r => r.status === 'pending').slice(0, 3).map((r) => (
               <RecCard key={r.id} r={r} tier={tier} onAction={onUpdateRec} />
             ))}
-            {recs.length === 0 && <Loading />}
+            {recs.length === 0 && <EmptyState icon={Sparkles2} title="No recommendations yet" description="Add some transactions and the AI will generate personalized recommendations with dollar impact." />}
           </div>
         </Card>
       </div>
@@ -1285,7 +1281,7 @@ function OverviewView(props: {
           </div>
           <div className="space-y-4">
             {goals.slice(0, 3).map((g) => <GoalCard key={g.id} g={g} />)}
-            {goals.length === 0 && <Loading />}
+            {goals.length === 0 && <EmptyState icon={Target} title="No savings goals yet" description="Create a savings goal like 'Trip to Japan' or 'Emergency Fund' to start tracking your progress." />}
           </div>
         </Card>
 
@@ -1300,7 +1296,7 @@ function OverviewView(props: {
           <div className="max-h-80 overflow-y-auto fw-scroll -mx-2">
             <div className="space-y-0.5 px-2">
               {txns.slice(0, 25).map((t) => <TxnRow key={t.id} t={t} />)}
-              {txns.length === 0 && <Loading />}
+              {txns.length === 0 && <EmptyState icon={Receipt} title="No transactions yet" description={'Add your first transaction by typing "I spent $25 on coffee at Blue Bottle" in the agent chat on the right.'} />}
             </div>
           </div>
         </Card>
@@ -1483,7 +1479,7 @@ function BudgetsView({ budgets, tier, onUpdate }: { budgets: BudgetItem[]; tier:
       {/* Envelope grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {budgets.map((b) => <BudgetDetailCard key={b.id} b={b} tier={tier} onUpdate={onUpdate} />)}
-        {budgets.length === 0 && <Loading />}
+        {budgets.length === 0 && <EmptyState icon={Wallet} title="No budgets yet" description="Set up monthly budget envelopes for each spending category to track your spending limits." />}
       </div>
 
       {tier === 'Viewer' && (
@@ -1651,7 +1647,7 @@ function GoalsView({ goals }: { goals: GoalItem[] }) {
             </Button>
           </Card>
         ))}
-        {goals.length === 0 && <Loading />}
+        {goals.length === 0 && <EmptyState icon={Target} title="No savings goals yet" description="Create a savings goal like 'Trip to Japan' or 'Emergency Fund' to start tracking your progress." />}
       </div>
 
       {simResult && (
@@ -1811,7 +1807,7 @@ function InsightsView({ anomalies, momDeltas, topMerchants, subscriptions, recs,
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-            ) : <Loading />}
+            ) : <EmptyState icon={BarChart3} title="No data yet" description="Add transactions via the agent chat to see your spending visualization here." />}
           </div>
         </Card>
 
@@ -1836,7 +1832,7 @@ function InsightsView({ anomalies, momDeltas, topMerchants, subscriptions, recs,
                 </div>
               </div>
             ))}
-            {subscriptions.length === 0 && <Loading />}
+            {subscriptions.length === 0 && <EmptyState icon={RefreshCw} title="No subscriptions detected" description="Recurring transactions will appear here once you add them via the agent chat." />}
           </div>
         </Card>
       </div>
@@ -1853,7 +1849,7 @@ function InsightsView({ anomalies, momDeltas, topMerchants, subscriptions, recs,
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {recs.map((r) => <RecCard key={r.id} r={r} tier={tier} onAction={onUpdateRec} />)}
-          {recs.length === 0 && <Loading />}
+          {recs.length === 0 && <EmptyState icon={Sparkles2} title="No recommendations yet" description="Add some transactions and the AI will generate personalized recommendations with dollar impact." />}
         </div>
       </Card>
     </div>
@@ -1978,6 +1974,30 @@ function Loading() {
   return (
     <div className="text-center py-8">
       <Loader2 className="h-4 w-4 animate-spin mx-auto text-[var(--fw-text-3)]" />
+    </div>
+  )
+}
+
+// Empty state for new users with no data
+function EmptyState({ icon: Icon, title, description, action, actionLabel }: {
+  icon: React.ComponentType<{ className?: string }>
+  title: string
+  description: string
+  action?: () => void
+  actionLabel?: string
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+      <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-[var(--fw-accent-soft)] to-[var(--fw-surface)] border border-[var(--fw-accent-border)] flex items-center justify-center mb-4">
+        <Icon className="h-6 w-6 text-[var(--fw-accent)]" />
+      </div>
+      <h3 className="text-[14px] font-semibold text-[var(--fw-text)] mb-1.5">{title}</h3>
+      <p className="text-[12px] text-[var(--fw-text-3)] max-w-[300px] leading-relaxed mb-4">{description}</p>
+      {action && actionLabel && (
+        <Button onClick={action} size="sm" className="h-8 px-4 bg-gradient-to-r from-[var(--fw-accent)] to-[var(--fw-accent-hover)] text-white rounded-lg text-[12px] font-medium shadow-[var(--fw-shadow-glow)]">
+          {actionLabel} <ArrowRight className="h-3 w-3 ml-1" />
+        </Button>
+      )}
     </div>
   )
 }
@@ -2820,7 +2840,7 @@ function AnalyticsView({ data, loading, onRefresh }: {
               </Card>
             )
           })}
-          {goalsProjection.length === 0 && <Loading />}
+          {goalsProjection.length === 0 && <EmptyState icon={Target} title="No goals to project" description="Create savings goals to see compound growth projections and Monte Carlo simulations." />}
         </div>
       </div>
 
@@ -4747,7 +4767,94 @@ function LandingPage({ onGetStarted, onDemo }: { onGetStarted: () => void; onDem
   )
 }
 
-// ═══ Auth Page (Professional) ═════════════════════════════════════════
+// Country-to-currency mapping
+const COUNTRY_CURRENCY_MAP: Record<string, { currency: string; name: string; flag: string }> = {
+  'US': { currency: 'USD', name: 'United States', flag: '🇺🇸' },
+  'GB': { currency: 'GBP', name: 'United Kingdom', flag: '🇬🇧' },
+  'DE': { currency: 'EUR', name: 'Germany', flag: '🇩🇪' },
+  'FR': { currency: 'EUR', name: 'France', flag: '🇫🇷' },
+  'IT': { currency: 'EUR', name: 'Italy', flag: '🇮🇹' },
+  'ES': { currency: 'EUR', name: 'Spain', flag: '🇪🇸' },
+  'NL': { currency: 'EUR', name: 'Netherlands', flag: '🇳🇱' },
+  'BE': { currency: 'EUR', name: 'Belgium', flag: '🇧🇪' },
+  'IE': { currency: 'EUR', name: 'Ireland', flag: '🇮🇪' },
+  'PT': { currency: 'EUR', name: 'Portugal', flag: '🇵🇹' },
+  'AT': { currency: 'EUR', name: 'Austria', flag: '🇦🇹' },
+  'FI': { currency: 'EUR', name: 'Finland', flag: '🇫🇮' },
+  'GR': { currency: 'EUR', name: 'Greece', flag: '🇬🇷' },
+  'JP': { currency: 'JPY', name: 'Japan', flag: '🇯🇵' },
+  'CN': { currency: 'CNY', name: 'China', flag: '🇨🇳' },
+  'IN': { currency: 'INR', name: 'India', flag: '🇮🇳' },
+  'KR': { currency: 'KRW', name: 'South Korea', flag: '🇰🇷' },
+  'AU': { currency: 'AUD', name: 'Australia', flag: '🇦🇺' },
+  'CA': { currency: 'CAD', name: 'Canada', flag: '🇨🇦' },
+  'CH': { currency: 'CHF', name: 'Switzerland', flag: '🇨🇭' },
+  'SG': { currency: 'SGD', name: 'Singapore', flag: '🇸🇬' },
+  'HK': { currency: 'HKD', name: 'Hong Kong', flag: '🇭🇰' },
+  'BR': { currency: 'BRL', name: 'Brazil', flag: '🇧🇷' },
+  'MX': { currency: 'MXN', name: 'Mexico', flag: '🇲🇽' },
+  'RU': { currency: 'RUB', name: 'Russia', flag: '🇷🇺' },
+  'ZA': { currency: 'ZAR', name: 'South Africa', flag: '🇿🇦' },
+  'AE': { currency: 'AED', name: 'UAE', flag: '🇦🇪' },
+  'TH': { currency: 'THB', name: 'Thailand', flag: '🇹🇭' },
+  'SE': { currency: 'SEK', name: 'Sweden', flag: '🇸🇪' },
+  'NO': { currency: 'NOK', name: 'Norway', flag: '🇳🇴' },
+  'DK': { currency: 'DKK', name: 'Denmark', flag: '🇩🇰' },
+  'PL': { currency: 'PLN', name: 'Poland', flag: '🇵🇱' },
+  'TR': { currency: 'TRY', name: 'Turkey', flag: '🇹🇷' },
+  'ID': { currency: 'IDR', name: 'Indonesia', flag: '🇮🇩' },
+  'MY': { currency: 'MYR', name: 'Malaysia', flag: '🇲🇾' },
+  'PH': { currency: 'PHP', name: 'Philippines', flag: '🇵🇭' },
+  'VN': { currency: 'VND', name: 'Vietnam', flag: '🇻🇳' },
+  'PK': { currency: 'PKR', name: 'Pakistan', flag: '🇵🇰' },
+  'BD': { currency: 'BDT', name: 'Bangladesh', flag: '🇧🇩' },
+  'NG': { currency: 'NGN', name: 'Nigeria', flag: '🇳🇬' },
+  'EG': { currency: 'EGP', name: 'Egypt', flag: '🇪🇬' },
+  'AR': { currency: 'ARS', name: 'Argentina', flag: '🇦🇷' },
+  'CL': { currency: 'CLP', name: 'Chile', flag: '🇨🇱' },
+  'CO': { currency: 'COP', name: 'Colombia', flag: '🇨🇴' },
+  'PE': { currency: 'PEN', name: 'Peru', flag: '🇵🇪' },
+  'NZ': { currency: 'NZD', name: 'New Zealand', flag: '🇳🇿' },
+  'IL': { currency: 'ILS', name: 'Israel', flag: '🇮🇱' },
+  'CZ': { currency: 'CZK', name: 'Czech Republic', flag: '🇨🇿' },
+  'HU': { currency: 'HUF', name: 'Hungary', flag: '🇭🇺' },
+  'RO': { currency: 'RON', name: 'Romania', flag: '🇷🇴' },
+  'UA': { currency: 'UAH', name: 'Ukraine', flag: '🇺🇦' },
+  'KE': { currency: 'KES', name: 'Kenya', flag: '🇰🇪' },
+  'GH': { currency: 'GHS', name: 'Ghana', flag: '🇬🇭' },
+  'SA': { currency: 'SAR', name: 'Saudi Arabia', flag: '🇸🇦' },
+  'QA': { currency: 'QAR', name: 'Qatar', flag: '🇶🇦' },
+  'KW': { currency: 'KWD', name: 'Kuwait', flag: '🇰🇼' },
+  'OM': { currency: 'OMR', name: 'Oman', flag: '🇴🇲' },
+  'JO': { currency: 'JOD', name: 'Jordan', flag: '🇯🇴' },
+  'LB': { currency: 'LBP', name: 'Lebanon', flag: '🇱🇧' },
+  'LK': { currency: 'LKR', name: 'Sri Lanka', flag: '🇱🇰' },
+  'HR': { currency: 'EUR', name: 'Croatia', flag: '🇭🇷' },
+  'BG': { currency: 'BGN', name: 'Bulgaria', flag: '🇧🇬' },
+  'RS': { currency: 'RSD', name: 'Serbia', flag: '🇷🇸' },
+  'IS': { currency: 'ISK', name: 'Iceland', flag: '🇮🇸' },
+  'MA': { currency: 'MAD', name: 'Morocco', flag: '🇲🇦' },
+  'DZ': { currency: 'DZD', name: 'Algeria', flag: '🇩🇿' },
+  'TN': { currency: 'TND', name: 'Tunisia', flag: '🇹🇳' },
+}
+
+// Password strength calculator
+function getPasswordStrength(password: string): { score: number; label: string; color: string } {
+  let score = 0
+  if (password.length >= 6) score++
+  if (password.length >= 10) score++
+  if (/[A-Z]/.test(password)) score++
+  if (/[a-z]/.test(password)) score++
+  if (/[0-9]/.test(password)) score++
+  if (/[^A-Za-z0-9]/.test(password)) score++
+  if (score <= 1) return { score, label: 'Very Weak', color: '#ef4444' }
+  if (score <= 2) return { score, label: 'Weak', color: '#f59e0b' }
+  if (score <= 3) return { score, label: 'Fair', color: '#eab308' }
+  if (score <= 4) return { score, label: 'Good', color: '#84cc16' }
+  return { score, label: 'Strong', color: '#10b981' }
+}
+
+// ═══ Auth Page (Professional with First/Last Name, Country, Password Strength) ═
 function AuthPage({ mode, setMode, onAuth, loading, onBack, onDemo }: {
   mode: 'login' | 'signup'
   setMode: (m: 'login' | 'signup') => void
@@ -4756,15 +4863,27 @@ function AuthPage({ mode, setMode, onAuth, loading, onBack, onDemo }: {
   onBack: () => void
   onDemo: () => void
 }) {
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
+  const [country, setCountry] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [apiError, setApiError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+
+  const selectedCountry = country ? COUNTRY_CURRENCY_MAP[country] : null
+  const pwStrength = password ? getPasswordStrength(password) : null
 
   const validate = (): boolean => {
     const errs: Record<string, string> = {}
-    if (mode === 'signup' && !name.trim()) errs.name = 'Full name is required'
+    if (mode === 'signup') {
+      if (!firstName.trim()) errs.firstName = 'First name is required'
+      else if (firstName.trim().length < 2) errs.firstName = 'Enter a valid first name'
+      if (!lastName.trim()) errs.lastName = 'Last name is required'
+      else if (lastName.trim().length < 2) errs.lastName = 'Enter a valid last name'
+      if (!country) errs.country = 'Please select your country'
+    }
     if (!email.trim()) errs.email = 'Email is required'
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.email = 'Enter a valid email address'
     if (!password) errs.password = 'Password is required'
@@ -4773,18 +4892,19 @@ function AuthPage({ mode, setMode, onAuth, loading, onBack, onDemo }: {
     return Object.keys(errs).length === 0
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!validate()) return
     setErrors({})
-    onAuth(mode, email, password, mode === 'signup' ? name : undefined)
+    setApiError('')
+    const fullName = `${firstName.trim()} ${lastName.trim()}`.trim()
+    onAuth(mode, email, password, mode === 'signup' ? fullName : undefined)
   }
 
   return (
     <div className="min-h-screen flex bg-[var(--fw-bg)]">
       {/* Left side — branding panel */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 bg-gradient-to-br from-[var(--fw-accent)] via-[var(--fw-accent-hover)] to-[#4338ca] text-white relative overflow-hidden">
-        {/* Decorative grid */}
         <div className="absolute inset-0 opacity-10" style={{
           backgroundImage: 'linear-gradient(rgba(255,255,255,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.3) 1px, transparent 1px)',
           backgroundSize: '40px 40px',
@@ -4799,7 +4919,7 @@ function AuthPage({ mode, setMode, onAuth, loading, onBack, onDemo }: {
             </div>
             <span className="text-[20px] font-semibold tracking-tight">FinWise</span>
           </div>
-          <h1 className="text-[36px] font-bold leading-tight mb-4">
+          <h1 className="text-[36px] font-bold leading-tight mb-4 whitespace-pre-line">
             {mode === 'signup' ? 'Start your journey to\nfinancial intelligence' : 'Welcome back to\nyour financial copilot'}
           </h1>
           <p className="text-[14px] text-white/80 max-w-[400px] leading-relaxed mb-8">
@@ -4829,8 +4949,8 @@ function AuthPage({ mode, setMode, onAuth, loading, onBack, onDemo }: {
       </div>
 
       {/* Right side — form panel */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-12">
-        <div className="w-full max-w-[400px]">
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-12 overflow-y-auto">
+        <div className="w-full max-w-[420px] py-8">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-2.5 mb-8 justify-center">
             <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-[var(--fw-accent)] to-[var(--fw-accent-hover)] flex items-center justify-center">
@@ -4849,40 +4969,88 @@ function AuthPage({ mode, setMode, onAuth, loading, onBack, onDemo }: {
           <h2 className="text-[24px] font-bold mb-1">
             {mode === 'signup' ? 'Create your account' : 'Sign in'}
           </h2>
-          <p className="text-[13px] text-[var(--fw-text-3)] mb-8">
+          <p className="text-[13px] text-[var(--fw-text-3)] mb-6">
             {mode === 'signup' ? 'Start with a fresh account — no demo data, just your real finances.' : 'Welcome back. Enter your credentials to continue.'}
           </p>
 
+          {/* API Error banner */}
+          {apiError && (
+            <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <span className="text-[12px] text-red-700 dark:text-red-400">{apiError}</span>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === 'signup' && (
-              <div>
-                <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Full Name</label>
-                <div className="relative">
-                  <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--fw-text-3)]" />
-                  <Input
-                    value={name}
-                    onChange={(e) => { setName(e.target.value); if (errors.name) setErrors({ ...errors, name: '' }) }}
-                    placeholder="John Doe"
-                    className={`h-11 pl-10 text-[13px] bg-[var(--fw-surface-2)] rounded-lg ${errors.name ? 'border-red-400' : 'border-[var(--fw-border)]'}`}
-                  />
+              <>
+                {/* First Name + Last Name */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">First Name</label>
+                    <Input
+                      value={firstName}
+                      onChange={(e) => { setFirstName(e.target.value); if (errors.firstName) setErrors({ ...errors, firstName: '' }) }}
+                      placeholder="John"
+                      className={`h-11 text-[13px] bg-[var(--fw-surface-2)] rounded-lg ${errors.firstName ? 'border-red-400' : 'border-[var(--fw-border)]'}`}
+                    />
+                    {errors.firstName && <p className="text-[11px] text-red-500 mt-1">{errors.firstName}</p>}
+                  </div>
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Last Name</label>
+                    <Input
+                      value={lastName}
+                      onChange={(e) => { setLastName(e.target.value); if (errors.lastName) setErrors({ ...errors, lastName: '' }) }}
+                      placeholder="Doe"
+                      className={`h-11 text-[13px] bg-[var(--fw-surface-2)] rounded-lg ${errors.lastName ? 'border-red-400' : 'border-[var(--fw-border)]'}`}
+                    />
+                    {errors.lastName && <p className="text-[11px] text-red-500 mt-1">{errors.lastName}</p>}
+                  </div>
                 </div>
-                {errors.name && <p className="text-[11px] text-red-500 mt-1">{errors.name}</p>}
-              </div>
+
+                {/* Country selector */}
+                <div>
+                  <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Country</label>
+                  <Select value={country} onValueChange={(v) => { setCountry(v); if (errors.country) setErrors({ ...errors, country: '' }) }}>
+                    <SelectTrigger className={`h-11 text-[13px] bg-[var(--fw-surface-2)] rounded-lg ${errors.country ? 'border-red-400' : 'border-[var(--fw-border)]'}`}>
+                      <SelectValue placeholder="Select your country" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[250px]">
+                      {Object.entries(COUNTRY_CURRENCY_MAP).sort((a, b) => a[1].name.localeCompare(b[1].name)).map(([code, c]) => (
+                        <SelectItem key={code} value={code}>
+                          <span className="mr-2">{c.flag}</span> {c.name} <span className="text-[var(--fw-text-3)] ml-1">({c.currency})</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.country && <p className="text-[11px] text-red-500 mt-1">{errors.country}</p>}
+                  {selectedCountry && (
+                    <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-[var(--fw-accent)]">
+                      <Globe className="h-3 w-3" />
+                      Currency auto-set to <strong>{selectedCountry.currency}</strong> — you can change it later in Settings
+                    </div>
+                  )}
+                </div>
+              </>
             )}
+
+            {/* Email */}
             <div>
               <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Email Address</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--fw-text-3)]" />
                 <Input
                   value={email}
-                  onChange={(e) => { setEmail(e.target.value); if (errors.email) setErrors({ ...errors, email: '' }) }}
+                  onChange={(e) => { setEmail(e.target.value); if (errors.email) setErrors({ ...errors, email: '' }); setApiError('') }}
                   type="email"
                   placeholder="you@example.com"
-                  className={`h-11 pl-10 text-[13px] bg-[var(--fw-surface-2)] rounded-lg ${errors.email ? 'border-red-400' : 'border-[var(--fw-border)]'}`}
+                  className={`h-11 pl-10 text-[13px] bg-[var(--fw-surface-2)] rounded-lg ${errors.email || apiError ? 'border-red-400' : 'border-[var(--fw-border)]'}`}
                 />
               </div>
               {errors.email && <p className="text-[11px] text-red-500 mt-1">{errors.email}</p>}
             </div>
+
+            {/* Password with strength meter */}
             <div>
               <label className="text-[11px] uppercase tracking-wider text-[var(--fw-text-3)] font-semibold mb-1.5 block">Password</label>
               <div className="relative">
@@ -4894,12 +5062,31 @@ function AuthPage({ mode, setMode, onAuth, loading, onBack, onDemo }: {
                   placeholder="••••••••"
                   className={`h-11 pl-10 pr-10 text-[13px] bg-[var(--fw-surface-2)] rounded-lg ${errors.password ? 'border-red-400' : 'border-[var(--fw-border)]'}`}
                 />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--fw-text-3)] hover:text-[var(--fw-text)]">
-                  {showPassword ? <Lock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--fw-text-3)] hover:text-[var(--fw-text)] text-[11px] font-medium">
+                  {showPassword ? 'Hide' : 'Show'}
                 </button>
               </div>
               {errors.password && <p className="text-[11px] text-red-500 mt-1">{errors.password}</p>}
-              {mode === 'signup' && <p className="text-[10px] text-[var(--fw-text-3)] mt-1.5">Must be at least 6 characters</p>}
+              {/* Password strength meter */}
+              {mode === 'signup' && password && (
+                <div className="mt-2">
+                  <div className="flex items-center gap-1.5">
+                    {[1, 2, 3, 4, 5, 6].map(i => (
+                      <div
+                        key={i}
+                        className="h-1 flex-1 rounded-full transition-all"
+                        style={{ backgroundColor: pwStrength && i <= pwStrength.score ? pwStrength.color : 'var(--fw-surface-3)' }}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-[10px] text-[var(--fw-text-3)]">Min 6 characters</span>
+                    {pwStrength && (
+                      <span className="text-[10px] font-semibold" style={{ color: pwStrength.color }}>{pwStrength.label}</span>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             <Button type="submit" disabled={loading} className="w-full h-11 mt-2 bg-gradient-to-r from-[var(--fw-accent)] to-[var(--fw-accent-hover)] text-white rounded-lg text-[13px] font-semibold shadow-[var(--fw-shadow-glow)]">
@@ -4922,7 +5109,7 @@ function AuthPage({ mode, setMode, onAuth, loading, onBack, onDemo }: {
           {/* Switch mode */}
           <div className="text-center mt-6 text-[12px] text-[var(--fw-text-3)]">
             {mode === 'signup' ? 'Already have an account? ' : "Don't have an account? "}
-            <button onClick={() => { setMode(mode === 'signup' ? 'login' : 'signup'); setErrors({}) }} className="text-[var(--fw-accent)] font-medium hover:underline">
+            <button onClick={() => { setMode(mode === 'signup' ? 'login' : 'signup'); setErrors({}); setApiError('') }} className="text-[var(--fw-accent)] font-medium hover:underline">
               {mode === 'signup' ? 'Sign in' : 'Sign up free'}
             </button>
           </div>
@@ -5078,7 +5265,7 @@ function OnboardingPage({ userName, tasks, completedTasks, onComplete, onSkip }:
           <div className="flex items-start gap-2">
             <Info className="h-4 w-4 text-[var(--fw-accent)] flex-shrink-0 mt-0.5" />
             <div className="text-[11px] text-[var(--fw-text-2)] leading-relaxed">
-              Your account starts completely empty — no demo data. Add your first transaction by typing something like "I spent $25 on coffee at Blue Bottle" in the agent chat after the tour.
+              Your account starts completely empty — no demo data. Add your first transaction by typing something like "I spent $25 on coffee at Blue Bottle' in the agent chat after the tour.
             </div>
           </div>
         </div>
