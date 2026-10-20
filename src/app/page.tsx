@@ -5168,7 +5168,7 @@ function AuthPage({ mode, setMode, onAuth, loading, onBack }: {
           </div>
         </div>
         <div className="relative z-10 text-[11px] text-white/60">
-          PBCSF International Track · Topic A · Built with Next.js 16 & Z.ai LLM
+          Built with Next.js 16
         </div>
       </div>
 
