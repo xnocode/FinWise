@@ -570,10 +570,12 @@ export default function Home() {
   }
 
   const quickPrompts = [
-    { label: 'Add expense', text: 'I spent $42 on groceries at Trader Joe\'s' },
-    { label: 'Create goal', text: 'Create a goal to save $8000 for a vacation' },
+    { label: 'Add expense', text: 'Spent 20 BDT on coffee' },
+    { label: 'Undo entry', text: 'Undo last transaction' },
     { label: 'Monthly review', text: 'How did this month go?' },
     { label: 'Update budget', text: 'Set my dining budget to $400' },
+    { label: 'Create goal', text: 'Create a goal to save $5000 for a car' },
+    { label: 'Export data', text: 'Export my transactions' },
   ]
 
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -939,7 +941,7 @@ export default function Home() {
                 <span className="text-[12px] font-semibold">FinWise Agent</span>
               </div>
               <div className="text-[10px] text-[var(--fw-text-3)] mb-2.5 leading-relaxed">
-                Supervisor-Worker pattern with 4 specialized sub-agents and 7 tools.
+                Supervisor-Worker pattern with 4 specialized sub-agents and 13 tools.
               </div>
               <Button
                 onClick={() => setChatOpen(true)}
@@ -2116,7 +2118,7 @@ function ChatPanel(props: {
           </div>
           <div className="flex flex-col leading-none">
             <span className="text-[13px] font-semibold">FinWise Agent</span>
-            <span className="text-[10px] text-[var(--fw-text-3)]">Supervisor-Worker · 7 tools</span>
+            <span className="text-[10px] text-[var(--fw-text-3)]">Supervisor-Worker · 13 tools</span>
           </div>
         </div>
         <div className="flex items-center gap-1.5">

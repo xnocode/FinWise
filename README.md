@@ -71,7 +71,8 @@ FinWise/
 ### 1. Install dependencies
 
 ```bash
-cd "/home/ridoy/Downloads/FinWise"
+git clone https://github.com/xnocode/FinWise.git
+cd FinWise
 bun install
 # or: npm install
 ```
@@ -119,32 +120,27 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## How the Free Agentic AI Works
 
-FinWise includes a **free AI copilot** out of the box so your users never need an API key:
+FinWise includes a **free AI copilot** out of the box with **13 specialized tools**:
 
-1. When a user sends a chat message, the agent runs finance tools server-side (read/write transactions, budgets, goals).
-2. The agent interprets results and provides natural-language guidance and financial insights.
-3. Serverless and cloud deployment friendly — zero local download footprint, fast cold starts.
+1. When a user sends a chat message, the supervisor classifies intent and dispatches appropriate tools server-side (transactions CRUD, budgets, goals, multi-currency conversion, simulations).
+2. The agent interprets results and provides executive-grade natural-language financial intelligence.
+3. Fully serverless and cloud deployment friendly — zero local model download overhead and ultra-fast cold starts.
 
 **Optional:** Users with an OpenAI, Anthropic, or custom API key can configure it in Settings → AI Agent for higher-quality responses. The free model remains the default.
 
-## Deploying for Others to Use
+## Deployment Options
 
-If you want other people to use your FinWise instance:
+### Option A: Vercel (Recommended)
+FinWise is 100% serverless-ready and optimized for Vercel deployment:
+1. Connect your GitHub repository to Vercel.
+2. Add your `DATABASE_URL` (e.g. Supabase, Neon, or Railway PostgreSQL) and `AUTH_SECRET` in Vercel Environment Variables.
+3. Deploy! The `postinstall` script generates the Prisma Client automatically.
 
-### Option A: Host on your own computer (quickest)
+### Option B: Host locally with tunnel
 1. Keep the dev server running: `bun run dev`
 2. Expose it with a tunnel:
    - `ngrok http 3000`
    - Or: `cloudflared tunnel --url http://localhost:3000`
-3. Share the public URL with your friends.
-
-> ⚠️ Your computer must stay on for others to access it.
-
-### Option B: Deploy to a persistent server
-Recommended platforms: Railway, Render, Fly.io, or any VPS with Docker/Node support.
-
-- Ensure at least **1–2 GB of free RAM** for the local LLM model.
-- Avoid pure serverless platforms (e.g., Vercel serverless) for the local LLM, as cold starts and the 600 MB model download can time out.
 
 ## Database Models
 
