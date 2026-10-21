@@ -1089,7 +1089,7 @@ export default function Home() {
           <div className="flex items-center gap-3 text-[var(--fw-text-3)]">
             <span className="font-medium text-[var(--fw-text-2)]">FinWise</span>
             <span>·</span>
-            <span>PBCSF International Track · Topic A</span>
+            <span>AI Personal Finance Copilot</span>
           </div>
           <div className="flex items-center gap-3 text-[var(--fw-text-3)]">
             <span className="flex items-center gap-1"><Database className="h-3 w-3" /> SQLite · Prisma</span>
@@ -1531,7 +1531,7 @@ function TransactionsView({ txns, byCategory, onRefresh }: {
             <form onSubmit={(e) => { e.preventDefault(); handleAddTransaction() }} className="space-y-3">
               <div>
                 <label className="text-[11px] uppercase text-[var(--fw-text-3)] font-medium block mb-1.5">Type</label>
-                <Select value={addType} onValueChange={v => setAddType(v)}>
+                <Select value={addType} onValueChange={(v) => setAddType(v as 'debit' | 'credit')}>
                   <SelectTrigger className="h-9 text-[12px] border-[var(--fw-border)] rounded-lg bg-[var(--fw-surface-2)]">
                     <SelectValue />
                   </SelectTrigger>
@@ -4635,7 +4635,7 @@ function SettingsView({ data, loading, onRefresh, onUpdate, tier, setTier, priva
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="zai">Z.ai (host default; falls back if unavailable)</SelectItem>
+                <SelectItem value="zai">Free AI Copilot (no API key required)</SelectItem>
                 <SelectItem value="openai">OpenAI (GPT-4o, GPT-4, etc.)</SelectItem>
                 <SelectItem value="anthropic">Anthropic (Claude 3.5 Sonnet, etc.)</SelectItem>
                 <SelectItem value="custom">Custom (Ollama, LM Studio, any OpenAI-compatible)</SelectItem>
@@ -4682,7 +4682,7 @@ function SettingsView({ data, loading, onRefresh, onUpdate, tier, setTier, priva
               <div className="flex items-start gap-2">
                 <CheckCircle2 className="h-4 w-4 text-[var(--fw-positive)] flex-shrink-0 mt-0.5" />
                 <div className="text-[11px] text-[var(--fw-text-2)] leading-relaxed">
-                  Using <strong>Z.ai</strong> as the LLM provider — no API key required. This is the default and recommended option for the PBCSF competition. You can switch to OpenAI, Anthropic, or a local model (Ollama) at any time.
+                  Using <strong>Free AI Copilot</strong> — no API key required. You can switch to OpenAI, Anthropic, or a custom model (Ollama) at any time.
                 </div>
               </div>
             </div>

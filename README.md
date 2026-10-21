@@ -5,7 +5,7 @@ FinWise is an agentic personal finance copilot that helps you track spending, ma
 ## Key Features
 
 - **Chat-first finance agent** — add transactions, create goals, update budgets, and delete records using natural language
-- **Free LLM by default** — runs a local model (TinyLlama via transformers.js) so anyone can use the agent with **no API key and no signup**
+- **Free AI Copilot by default** — built-in free AI inference so anyone can use the agent with **no API key and no signup**
 - **Optional providers** — configure OpenAI, Anthropic, or a custom endpoint in Settings if you want higher-quality replies
 - **Transactions** — view, add, and remove expenses/income with categories and merchants
 - **Budgets** — monthly category envelopes with spend tracking
@@ -23,7 +23,7 @@ FinWise is an agentic personal finance copilot that helps you track spending, ma
 - **Database:** Prisma ORM + PostgreSQL
 - **Charts:** Recharts
 - **Forms:** React Hook Form + Zod
-- **AI agent:** Supervisor-worker pattern with tool calling; default LLM is local TinyLlama-1.1B via `@xenova/transformers`
+- **AI agent:** Supervisor-worker pattern with tool calling; default AI copilot works out-of-the-box with no API key
 - **Notifications:** Sonner toasts
 
 ## Project Structure
@@ -119,13 +119,13 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## How the Free Agentic AI Works
 
-FinWise includes a **free local LLM** so your users never need an API key:
+FinWise includes a **free AI copilot** out of the box so your users never need an API key:
 
 1. When a user sends a chat message, the agent runs finance tools server-side (read/write transactions, budgets, goals).
-2. The tool results are rewritten into natural language using **TinyLlama-1.1B-Chat** via `@xenova/transformers`.
-3. The model downloads once (~600 MB) and is cached on your server. After that, it works fully offline.
+2. The agent interprets results and provides natural-language guidance and financial insights.
+3. Serverless and cloud deployment friendly — zero local download footprint, fast cold starts.
 
-**Optional:** Users with an OpenAI, Anthropic, or custom API key can configure it in Settings → AI Agent for higher-quality responses. The free local model remains the default.
+**Optional:** Users with an OpenAI, Anthropic, or custom API key can configure it in Settings → AI Agent for higher-quality responses. The free model remains the default.
 
 ## Deploying for Others to Use
 

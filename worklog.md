@@ -1,9 +1,9 @@
-# Worklog — PBCSF International Track Topic A Roadmap PDF
+# Worklog — FinWise Personal Finance Copilot
 
 ---
 Task ID: 1
-Agent: Z.ai (main)
-Task: Build a comprehensive PDF roadmap for creating an AI agent for PBCSF International Track Topic A (Personal Finance Assistant).
+Agent: FinWise
+Task: Build a personal finance AI agent copilot.
 
 Work Log:
 - Loaded the `pdf` skill and read the report brief + cover.md typesetting spec.

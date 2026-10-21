@@ -78,7 +78,7 @@ export function sessionCookieOptions() {
 
 export function publicSettings(settings: UserSettings | null) {
   if (!settings) return null
-  const key = settings.llmApiKey || ''
+  const key = (settings as any).llmApiKey || ''
   return {
     ...settings,
     llmApiKey: key ? `••••${key.slice(-4)}` : '',
