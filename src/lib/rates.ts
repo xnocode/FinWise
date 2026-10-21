@@ -42,3 +42,21 @@ export async function convertToUsdCents(amount: number, fromCode: string): Promi
   if (!rate || rate <= 0) return Math.round(amount * 100)
   return Math.round((amount / rate) * 100)
 }
+
+/**
+ * Convert USD `cents` to target currency `toCode` (e.g. 'BDT', 'EUR') with formatted string.
+ */
+export async function convertFromUsdCents(cents: number, toCode: string): Promise<{ amount: number; formatted: string; symbol: string }> {
+  if (!Number.isFinite(cents)) return { amount: 0, formatted: '$0.00', symbol: '$' }
+  const code = (toCode || 'USD').toUpperCase()
+  const rates = await getRates()
+  const rate = rates[code] || 1
+  const usd = cents / 100
+  const converted = usd * rate
+  const symbols: Record<string, string> = {
+    USD: '$', EUR: '€', GBP: '£', JPY: '¥', BDT: '৳', INR: '₹', CNY: '¥', CAD: 'CA$', AUD: 'A$',
+  }
+  const symbol = symbols[code] || `${code} `
+  const formatted = `${symbol}${converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  return { amount: converted, formatted, symbol }
+}

@@ -146,7 +146,7 @@ export async function POST(req: NextRequest) {
             create: {
               displayName: String(name).trim(),
               currency: typeof currency === 'string' && currency.length === 3 ? currency : 'USD',
-              agentConfirmWrites: true,
+              agentConfirmWrites: false,
             },
           },
         },
